@@ -16,13 +16,13 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 
-#if !defined __SA_COMMON_H__
-#define __SA_COMMON_H__
+#if !defined __SIOT_COMMON_H__
+#define __SIOT_COMMON_H__
 
 // common includes
 //#include <memory.h> // for memcpy(), memset(), memcmp(). Note: their implementation may or may not be more effective than just by-byte operation on a particular target platform
 #include <string.h> // for memmove()
-#include "../hal/hal_platform.h"
+#include <hal_platform.h>
 
 // compiler-specific: disabling certain warnings
 #ifdef _MSC_VER
@@ -192,4 +192,4 @@ void printCounters();
 #define PRINT_COUNTERS()
 #endif // ENABLE_COUNTER_SYSTEM
 
-#endif // __SA_COMMON_H__
+#endif // __SIOT_COMMON_H__

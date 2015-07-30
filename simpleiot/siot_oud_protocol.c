@@ -2,7 +2,7 @@
 Copyright (C) 2015 OLogN Technologies AG
 
     This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License version 2 as 
+    it under the terms of the GNU General Public License version 2 as
     published by the Free Software Foundation.
 
     This program is distributed in the hope that it will be useful,
@@ -16,7 +16,7 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 
-#include "saoudp_protocol.h"
+#include "siot_oud_protocol.h"
 
 /*#define SAOIP_HEADER_INTERNAL 1
 #define SAOIP_HEADER_AGGREGATE_REQUEST 2

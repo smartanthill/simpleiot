@@ -15,10 +15,10 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#if !defined __ZEPTO_MEM_MNGMT_H__
-#define __ZEPTO_MEM_MNGMT_H__
+#if !defined __SIOT_MEM_MNGMT_H__
+#define __SIOT_MEM_MNGMT_H__
 
-#include "zepto_mem_mngmt_base.h"
+#include "siot_mem_mngmt_base.h"
 
 #ifdef ZEPTO_VM_USE_SIMPLE_FRAME
 #define PLAIN_REPLY_FRAME
@@ -139,4 +139,4 @@ INLINE void zepto_parser_encode_and_append_signed_int16( MEMORY_HANDLE mem_h, in
 void zepto_parser_encode_and_append_uint( MEMORY_HANDLE mem_h, const uint8_t* num_bytes, uint8_t num_sz_max );
 void zepto_parser_encode_and_prepend_uint16( MEMORY_HANDLE mem_h, uint16_t num );
 void zepto_parser_encode_and_prepend_uint( MEMORY_HANDLE mem_h, const uint8_t* num_bytes, uint8_t num_sz_max );
-#endif // __ZEPTO_MEM_MNGMT_H__
+#endif // __SIOT_MEM_MNGMT_H__

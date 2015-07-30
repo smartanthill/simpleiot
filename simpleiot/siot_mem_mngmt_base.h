@@ -15,21 +15,13 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#if !defined __SIOT_DATA_TYPES_H__
-#define __SIOT_DATA_TYPES_H__
+#if !defined __SIOT_MEM_MNGMT_BASE_H__
+#define __SIOT_MEM_MNGMT_BASE_H__
 
-#include "siot_uint48.h"
-#include <hal_time_provider.h>
+#include "siot_common.h"
 
+#define MEMORY_HANDLE uint8_t
+#define REQUEST_REPLY_HANDLE MEMORY_HANDLE
+#define MEMORY_HANDLE_INVALID 0xFF
 
-typedef sa_uint48_t sasp_nonce_type;
-#define SASP_NONCE_TYPE_SIZE 6 // sizeof(sa_uint48_t)
-
-typedef struct _timeout_action // NOTE: might be a temporary solution
-{
-	sa_time_val tv;
-	uint8_t action;
-} timeout_action;
-
-
-#endif // __SIOT_DATA_TYPES_H__
+#endif // __SIOT_MEM_MNGMT_BASE_H__

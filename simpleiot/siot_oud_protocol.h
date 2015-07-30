@@ -19,8 +19,8 @@ Copyright (C) 2015 OLogN Technologies AG
 #if !defined __SAOUDP_PROTOCOL_H__
 #define __SAOUDP_PROTOCOL_H__
 
-#include "sa_common.h"
-#include "zepto_mem_mngmt.h"
+#include "siot_common.h"
+#include "siot_mem_mngmt.h"
 
 
 // ret codes

@@ -16,11 +16,11 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 
-#include "saccp_protocol.h"
-#include "sagdp_protocol.h" // for packet status in chain
-#include "sa_uint48.h"
-#include "saccp_protocol_constants.h"
-#include "../sa_bodypart_list.h"
+#include "siot_cc_protocol.h"
+#include "siot_gd_protocol.h" // for packet status in chain
+#include "siot_uint48.h"
+#include "siot_cc_protocol_constants.h"
+#include "../../../src/sa_bodypart_list.h"
 
 typedef struct _SACCP_DATA
 {
@@ -435,7 +435,7 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, wa
 			ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected value of packet type\n" );
 		}
 	}
-	
+
 	ZEPTO_DEBUG_ASSERT( NULL == "Error: we should not be here!\n" );
 	return SACCP_RET_FAILED;
 }

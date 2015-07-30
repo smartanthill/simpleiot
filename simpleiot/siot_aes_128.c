@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#include "sa_aes_128.h"
+#include "siot_aes_128.h"
 
 const uint8_t rijndael_sbox[256] ZEPTO_PROG_CONSTANT_LOCATION =
 {

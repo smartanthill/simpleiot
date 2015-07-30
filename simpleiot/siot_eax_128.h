@@ -15,11 +15,11 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#if !defined __SA_EAX_128_H__
-#define __SA_EAX_128_H__
+#if !defined __SIOT_EAX_128_H__
+#define __SIOT_EAX_128_H__
 
-#include "sa_common.h"
-#include "sa_aes_128.h"
+#include "siot_common.h"
+#include "siot_aes_128.h"
 
 //void eax_128_init_ctr( const uint8_t* key, const uint8_t* nonce, uint8_t nonce_sz, uint8_t* ctr, uint8_t* tag_out );
 //void eax_128_process_header( const uint8_t* key, const uint8_t* header, uint8_t header_sz, uint8_t* header_prim );
@@ -34,4 +34,4 @@ void eax_128_init_for_nonzero_msg( const uint8_t* key, const uint8_t* nonce, uin
 void eax_128_finalize_for_nonzero_msg( const uint8_t* key, const uint8_t* header, uint8_t header_sz, uint8_t* ctr, uint8_t* msg_cbc_val, uint8_t* tag, uint8_t tag_out_sz );
 void eax_128_calc_tag_of_zero_msg( const uint8_t* key, const uint8_t* header, uint8_t header_sz, const uint8_t* nonce, uint8_t nonce_sz, uint8_t* tag, uint8_t tag_out_sz );
 
-#endif // __SA_EAX_128_H__
+#endif // __SIOT_EAX_128_H__

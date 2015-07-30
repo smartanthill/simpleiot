@@ -15,11 +15,11 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#if ! defined __SA_UINT48_H__
-#define __SA_UINT48_H__
+#if ! defined __SIOT_UINT48_H__
+#define __SIOT_UINT48_H__
 
-#include "sa_common.h"
-#include "zepto_mem_mngmt.h"
+#include "siot_common.h"
+#include "siot_mem_mngmt.h"
 
 typedef uint8_t sa_uint48_t[6];
 
@@ -139,4 +139,4 @@ uint8_t sa_uint48_get_byte( const sa_uint48_t t, uint8_t byte_num ) // returns a
 #error SA_USED_ENDIANNES has unexpected value
 #endif
 
-#endif // __SA_UINT48_H__
+#endif // __SIOT_UINT48_H__

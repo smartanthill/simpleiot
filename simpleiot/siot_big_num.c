@@ -16,8 +16,8 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 
-#include "sa_common.h"
-#include "zepto_big_num.h"
+#include "siot_common.h"
+#include "siot_big_num.h"
 
 FORCE_INLINE
 void zepto_bignum_add_product_and_do_modular_part( uint8_t* accum, uint8_t* extra, const uint8_t* bignum, uint8_t bytefactor, const uint8_t* mod, uint8_t inverter )

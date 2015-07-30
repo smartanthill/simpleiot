@@ -2,7 +2,7 @@
 Copyright (C) 2015 OLogN Technologies AG
 
     This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License version 2 as 
+    it under the terms of the GNU General Public License version 2 as
     published by the Free Software Foundation.
 
     This program is distributed in the hope that it will be useful,
@@ -15,7 +15,7 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#include "sagdp_protocol.h"
+#include "siot_gd_protocol.h"
 
 static SAGDP_DATA sagdp_data;
 
@@ -233,7 +233,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP(): PID last sent last    : %x%x%x%x%x%x\n", pidlsent_last[0], pidlsent_last[1], pidlsent_last[2], pidlsent_last[3], pidlsent_last[4], pidlsent_last[5] );
 			bool isold = sa_uint48_compare( enc_reply_to, sagdp_data.first_last_sent_packet_id ) < 0;
 			if ( isold )
-			{ 
+			{
 				// TODO: check against previous range
 				INCREMENT_COUNTER( 23, "handler_sagdp_receive_up(), idle, is-old" );
 				ZEPTO_DEBUG_PRINTF_3( "SAGDP OK: state = %d, packet_status = %d; isold\n", state, packet_status );
@@ -621,7 +621,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 		else if ( ( packet_status & SAGDP_P_STATUS_MASK ) == SAGDP_P_STATUS_FIRST )
 		{
 			INCREMENT_COUNTER( 41, "handler_sagdp_receive_up(), wait-remote, first" );
-			// main question: is it a re-sent or a start of an actually new chain 
+			// main question: is it a re-sent or a start of an actually new chain
 			sasp_nonce_type enc_reply_to;
 			zepto_parser_decode_encoded_uint_as_sa_uint48( &po, enc_reply_to );
 			bool current = sa_uint48_compare( enc_reply_to, sagdp_data.last_received_chain_id ) == 0;
@@ -885,7 +885,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 		else if ( ( packet_status & SAGDP_P_STATUS_MASK ) == SAGDP_P_STATUS_FIRST ) // TODO: same plus request ACK
 		{
 			INCREMENT_COUNTER( 41, "handler_sagdp_receive_up(), wait-remote, first" );
-			// main question: is it a re-sent or a start of an actually new chain 
+			// main question: is it a re-sent or a start of an actually new chain
 			sasp_nonce_type enc_reply_to;
 			zepto_parser_decode_encoded_uint_as_sa_uint48( &po, enc_reply_to );
 			bool current = sa_uint48_compare( enc_reply_to, sagdp_data.last_received_chain_id ) == 0;
@@ -962,7 +962,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 		}
 #endif
 	}
-	
+
 	else // invalid states
 	{
 		INCREMENT_COUNTER( 50, "handler_sagdp_receive_up(), invalid state" );
@@ -1057,7 +1057,7 @@ uint8_t handler_sagdp_receive_request_resend_lsp( sa_time_val* currt, waiting_fo
 
 uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ )
 {
-	// It is a responsibility of a higher level to report the status of a packet. 
+	// It is a responsibility of a higher level to report the status of a packet.
 	//
 
 	// init parser object

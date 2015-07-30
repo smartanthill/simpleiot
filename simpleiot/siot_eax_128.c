@@ -16,7 +16,7 @@ Copyright (C) 2015 OLogN Technologies AG
 *******************************************************************************/
 
 
-#include "sa_eax_128.h"
+#include "siot_eax_128.h"
 
 void eax_128_galois_times_2( uint8_t * buff )
 {

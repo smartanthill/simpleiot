@@ -15,10 +15,10 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
-#if !defined __SA_BIG_NUM_H__
-#define __SA_BIG_NUM_H__
+#if !defined __SIOT_BIG_NUM_H__
+#define __SIOT_BIG_NUM_H__
 
-#include "sa_common.h"
+#include "siot_common.h"
 
 #define M_BYTE_SIZE 128 // must be a power of 2
 
@@ -37,4 +37,4 @@ void zepto_bignum_m_exponentiate_in_montgomery_space( const uint8_t* mod, uint8_
 }
 #endif
 
-#endif // __SA_BIG_NUM_H__
+#endif // __SIOT_BIG_NUM_H__

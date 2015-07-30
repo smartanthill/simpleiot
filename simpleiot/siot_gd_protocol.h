@@ -19,12 +19,12 @@ Copyright (C) 2015 OLogN Technologies AG
 #if !defined __SAGDP_PROTOCOL_H__
 #define __SAGDP_PROTOCOL_H__
 
-#include "sa_common.h"
+#include "siot_common.h"
 //#include "sa_eeprom.h"
-#include "zepto_mem_mngmt.h"
-#include "sa_data_types.h"
-#include "../hal/hal_time_provider.h"
-#include "../hal/hal_waiting.h"
+#include "siot_mem_mngmt.h"
+#include "siot_data_types.h"
+#include <hal_time_provider.h>
+#include <hal_waiting.h>
 
 
 // RET codes

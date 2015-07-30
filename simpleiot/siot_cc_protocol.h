@@ -19,10 +19,10 @@ Copyright (C) 2015 OLogN Technologies AG
 #if !defined __SACCP_PROTOCOL_H__
 #define __SACCP_PROTOCOL_H__
 
-#include "sa_common.h"
-#include "sa_data_types.h"
-#include "zepto_mem_mngmt.h"
-#include "../hal/hal_waiting.h"
+#include "siot_common.h"
+#include "siot_data_types.h"
+#include "siot_mem_mngmt.h"
+#include <hal_waiting.h>
 
 
 // handlers
