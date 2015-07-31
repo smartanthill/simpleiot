@@ -20,7 +20,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "siot_gd_protocol.h" // for packet status in chain
 #include "siot_uint48.h"
 #include "siot_cc_protocol_constants.h"
-#include "../../../src/sa_bodypart_list.h"
+#include "siot_bodypart_list.h"
 
 typedef struct _SACCP_DATA
 {
