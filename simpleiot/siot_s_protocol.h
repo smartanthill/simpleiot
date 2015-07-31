@@ -20,7 +20,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_common.h"
 #include "siot_data_types.h"
-#include "../../../src/common/sa_eeprom.h"
+#include <siot_eeprom.h>
 #include "siot_mem_mngmt.h"
 
 // RET codes
