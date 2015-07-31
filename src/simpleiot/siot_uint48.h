@@ -19,7 +19,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #define __SIOT_UINT48_H__
 
 #include "siot_common.h"
-#include "siot_mem_mngmt.h"
+#include "../simpleiot_hal/siot_mem_mngmt.h"
 
 typedef uint8_t sa_uint48_t[6];
 

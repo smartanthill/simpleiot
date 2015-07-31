@@ -21,8 +21,8 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_common.h"
 #include "siot_data_types.h"
-#include "siot_mem_mngmt.h"
-#include <simpleiot_hal/hal_waiting.h>
+#include "../simpleiot_hal/siot_mem_mngmt.h"
+#include "../simpleiot_hal/hal_waiting.h"
 
 
 // handlers

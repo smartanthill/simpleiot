@@ -18,7 +18,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #if !defined __SIOT_MEM_MNGMT_BASE_H__
 #define __SIOT_MEM_MNGMT_BASE_H__
 
-#include "siot_common.h"
+#include "../simpleiot/siot_common.h"
 
 #define MEMORY_HANDLE uint8_t
 #define REQUEST_REPLY_HANDLE MEMORY_HANDLE

@@ -17,7 +17,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 
 #include "siot_s_protocol.h"
-#include "siot_mem_mngmt.h"
+#include "../simpleiot_hal/siot_mem_mngmt.h"
 #include "siot_eax_128.h"
 
 static 	SASP_DATA sasp_data;

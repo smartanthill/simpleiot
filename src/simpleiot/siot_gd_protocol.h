@@ -21,7 +21,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_common.h"
 //#include "sa_eeprom.h"
-#include "siot_mem_mngmt.h"
+#include "../simpleiot_hal/siot_mem_mngmt.h"
 #include "siot_data_types.h"
 #include <hal_time_provider.h>
 #include "../simpleiot_hal/hal_waiting.h"

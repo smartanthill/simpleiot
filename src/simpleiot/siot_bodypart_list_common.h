@@ -21,7 +21,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_common.h"
 #include "siot_data_types.h"
-#include "siot_mem_mngmt.h"
+#include "../simpleiot_hal/siot_mem_mngmt.h"
 
 typedef uint8_t (*plugin_handler_config_fn)(const void* plugin_config, void* plugin_state);
 typedef uint8_t (*plugin_handler_fn)( const void* plugin_config, void* plugin_state, parser_obj* command, MEMORY_HANDLE reply/*, WaitingFor* waiting_for*/, uint8_t first_byte );
