@@ -15,27 +15,38 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
+#if !defined __SA_COMMLAYER_H__
+#define __SA_COMMLAYER_H__
 
-#if !defined __SACCP_PROTOCOL_H__
-#define __SACCP_PROTOCOL_H__
-
-#include "siot_common.h"
-#include "siot_data_types.h"
-#include "siot_mem_mngmt.h"
-#include <simpleiot_hal/hal_waiting.h>
-
-
-// handlers
+#include <simpleiot/siot_common.h>
+#include "zepto_mem_mngmt_hal_spec.h"
+#include <simpleiot/siot_mem_mngmt.h>
 
 // RET codes
-#define SACCP_RET_FAILED 0 // any failure
-#define SACCP_RET_DONE 1 // any failure
-#define SACCP_RET_PASS_LOWER 2 // packet must be sent to a communication peer
-#define SACCP_RET_WAIT 3 // processing is not over; WaitingFor describes details
+#define COMMLAYER_RET_FAILED 0
+#define COMMLAYER_RET_OK 1
+#define COMMLAYER_RET_PENDING 2
 
-void zepto_vm_init();
+#define HAL_GET_PACKET_BYTES_IN_PROGRESS 0
+#define HAL_GET_PACKET_BYTES_FAILED 1
+#define HAL_GET_PACKET_BYTES_DONE 2
 
-uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, waiting_for* wf );
-//uint8_t handler_sacpp_reply( MEMORY_HANDLE mem_h );
+#define COMMLAYER_RET_FROM_DEV 11
+#define COMMLAYER_RET_TIMEOUT 12
 
-#endif // __SACCP_PROTOCOL_H__
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+bool communication_initialize();
+void communication_terminate();
+uint8_t send_message( MEMORY_HANDLE mem_h );
+uint8_t hal_get_packet_bytes( MEMORY_HANDLE mem_h );
+void keep_transmitter_on( bool keep_on );
+
+#ifdef __cplusplus
+}
+#endif
+
+
+#endif // __SA_COMMLAYER_H__

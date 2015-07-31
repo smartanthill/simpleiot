@@ -24,7 +24,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "siot_mem_mngmt.h"
 #include "siot_data_types.h"
 #include <hal_time_provider.h>
-#include <hal_waiting.h>
+#include "../simpleiot_hal/hal_waiting.h"
 
 
 // RET codes

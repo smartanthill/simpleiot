@@ -15,27 +15,25 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
+#if !defined __SA_EEPROM_H__
+#define __SA_EEPROM_H__
 
-#if !defined __SACCP_PROTOCOL_H__
-#define __SACCP_PROTOCOL_H__
+#include <simpleiot/siot_common.h>
 
-#include "siot_common.h"
-#include "siot_data_types.h"
-#include "siot_mem_mngmt.h"
-#include <simpleiot_hal/hal_waiting.h>
+// data IDs (for communication with eeprom
+#define EEPROM_SLOT_DATA_SASP_NONCE_LW_ID 0 // Nonce Lower Watermark
+#define EEPROM_SLOT_DATA_SASP_NONCE_LS_ID 1 // Nonce to use For Sending
+
+#define EEPROM_SLOT_MAX 2
+// ...to be continued
+
+#define DATA_CONTINUE_LIFE_ID 0Xff // FAKE data used at simulator startup: if not present, a new life (whatever it means) is started
 
 
-// handlers
+// calls
+void format_eeprom_at_lifestart();
+bool init_eeprom_access();
+void eeprom_write( uint8_t id, uint8_t* data);
+void eeprom_read( uint8_t id, uint8_t* data);
 
-// RET codes
-#define SACCP_RET_FAILED 0 // any failure
-#define SACCP_RET_DONE 1 // any failure
-#define SACCP_RET_PASS_LOWER 2 // packet must be sent to a communication peer
-#define SACCP_RET_WAIT 3 // processing is not over; WaitingFor describes details
-
-void zepto_vm_init();
-
-uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, waiting_for* wf );
-//uint8_t handler_sacpp_reply( MEMORY_HANDLE mem_h );
-
-#endif // __SACCP_PROTOCOL_H__
+#endif // __SA_EEPROM_H__
