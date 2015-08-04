@@ -77,15 +77,14 @@ void sagdp_init( /*SAGDP_DATA* sagdp_data*/ )
 
 // PROCESSING TIMEOUT-BASED SEQUENCES
 
-#define SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( tval, sec_pow ) \
+#define SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( curr_tval, diff_tval, sec_pow ) \
 	{\
-		sa_time_val tmp_t; \
 		cappedExponentiateLTO( &(sagdp_data.last_timeout) ); \
 		if (sec_pow > SAGDP_LTO_POW_MAX) sec_pow = SAGDP_LTO_POW_MAX; \
-		SA_TIME_LOAD_TICKS_FOR_1_SEC( tmp_t ); \
-		SA_TIME_MUL_TICKS_BY_2( tmp_t ) \
-		uint8_t i; for ( i=0; i<=sec_pow; i++) SA_TIME_MUL_TICKS_BY_1_AND_A_HALF( tmp_t ) \
-		SA_TIME_INCREMENT_BY_TICKS( tval, tmp_t ) \
+		SA_TIME_LOAD_TICKS_FOR_1_SEC( diff_tval ); \
+		SA_TIME_MUL_TICKS_BY_2( diff_tval ) \
+		uint8_t i; for ( i=0; i<=sec_pow; i++) SA_TIME_MUL_TICKS_BY_1_AND_A_HALF( diff_tval ) \
+		SA_TIME_INCREMENT_BY_TICKS( curr_tval, diff_tval ) \
 	}
 
 
@@ -93,8 +92,8 @@ void sagdp_init( /*SAGDP_DATA* sagdp_data*/ )
 	sagdp_data.resent_ordinal = 1; \
 	sagdp_data.event_type = SAGDP_EV_RESEND_LSP; ZEPTO_DEBUG_PRINTF_1( "------------ event set to SAGDP_EV_RESEND_LSP ----------------\n" );\
 	setIniLTO( &(sagdp_data.last_timeout) ); \
-	SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( *currt, sagdp_data.resent_ordinal ) \
-	sa_hal_time_val_copy_from( &(sagdp_data.next_event_time), currt );
+	sa_hal_time_val_copy_from( &(sagdp_data.next_event_time), currt ); \
+	SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( sagdp_data.next_event_time, wf->wait_time, sagdp_data.resent_ordinal )
 
 
 #define SAGDP_CANCEL_RESENT_SEQUENCE \
@@ -111,13 +110,13 @@ void sagdp_init( /*SAGDP_DATA* sagdp_data*/ )
 #define SAGDP_REGISTER_SUBSEQUENT_RESENT_AND_RESET_TIMEOUT \
 	(sagdp_data.resent_ordinal) ++; \
 	ZEPTO_DEBUG_ASSERT( sagdp_data.last_timeout != 0 ); \
-	SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( *currt, sagdp_data.resent_ordinal ) \
-	sa_hal_time_val_copy_from( &(sagdp_data.next_event_time), currt );
+	sa_hal_time_val_copy_from( &(sagdp_data.next_event_time), currt ); \
+	SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( sagdp_data.next_event_time, wf->wait_time, sagdp_data.resent_ordinal )
 
-
+/*
 #define SAGDP_SHOULD_RESENT \
 	( sagdp_data.event_type == SAGDP_EV_RESEND_LSP && sa_hal_time_val_is_less( &(sagdp_data.next_event_time), currt ) )
-
+*/
 
 #define SAGDP_ASSERT_NO_SEQUENCE \
 	ZEPTO_DEBUG_ASSERT( sagdp_data.event_type == SAGDP_EV_NONE );
@@ -135,37 +134,49 @@ uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_typ
 	{
 		INCREMENT_COUNTER( 20, "handlerSAGDP_timer(), packet resent" );
 
-		if ( SAGDP_SHOULD_RESENT )
+//		if ( SAGDP_SHOULD_RESENT )
+		if ( sagdp_data.event_type == SAGDP_EV_RESEND_LSP ) // there is something to resend
 		{
-/*			zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM, mem_h );
-			ZEPTO_DEBUG_ASSERT( sagdp_data.state == SAGDP_STATE_WAIT_REMOTE );
-			return SAGDP_RET_TO_LOWER_REPEATED;*/
-			parser_obj po_lsm;
-			zepto_parser_init( &po_lsm, MEMORY_HANDLE_SAGDP_LSM );
-			ZEPTO_DEBUG_ASSERT ( zepto_parsing_remaining_bytes( &po_lsm ) != 0 );
+			bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(sagdp_data.next_event_time), &(wf->wait_time) );
+//			if ( sa_hal_time_val_is_less( &(sagdp_data.next_event_time), currt ) )
+			if ( time_still_remains ) // it's not a time for resending; just let themm know, when to wake us up basedcurrent schedule on 
+			{
+				// time difference (time to wait) is already loaded
+				return SAGDP_RET_OK;
+			}
+			else // time to resend; schedule new resend event and report wake time based on that new scheduling
+			{
+				parser_obj po_lsm;
+				zepto_parser_init( &po_lsm, MEMORY_HANDLE_SAGDP_LSM );
+				ZEPTO_DEBUG_ASSERT ( zepto_parsing_remaining_bytes( &po_lsm ) != 0 );
 
-			if ( nonce == NULL )
-				return SAGDP_RET_NEED_NONCE;
-			INCREMENT_COUNTER( 60, "handler_sagdp_timer(), wait-remote" );
+				if ( nonce == NULL )
+					return SAGDP_RET_NEED_NONCE;
+				INCREMENT_COUNTER( 60, "handler_sagdp_timer(), wait-remote" );
 
-			SAGDP_REGISTER_SUBSEQUENT_RESENT_AND_RESET_TIMEOUT
+				SAGDP_REGISTER_SUBSEQUENT_RESENT_AND_RESET_TIMEOUT
 
-			ZEPTO_DEBUG_PRINTF_7( "handler_sagdp_timer(): PID: %x%x%x%x%x%x\n", nonce[0], nonce[1], nonce[2], nonce[3], nonce[4], nonce[5] );
+				ZEPTO_DEBUG_PRINTF_7( "handler_sagdp_timer(): PID: %x%x%x%x%x%x\n", nonce[0], nonce[1], nonce[2], nonce[3], nonce[4], nonce[5] );
 
-			// apply nonce
-			sa_uint48_init_by( sagdp_data.next_last_sent_packet_id, nonce );
+				// apply nonce
+				sa_uint48_init_by( sagdp_data.next_last_sent_packet_id, nonce );
 
-			zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM, mem_h );
-			zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, mem_h_addr );
-			ZEPTO_DEBUG_ASSERT( sagdp_data.state == SAGDP_STATE_WAIT_REMOTE );
-			return SAGDP_RET_TO_LOWER_REPEATED;
+				zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM, mem_h );
+				zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, mem_h_addr );
+				ZEPTO_DEBUG_ASSERT( sagdp_data.state == SAGDP_STATE_WAIT_REMOTE );
+				return SAGDP_RET_TO_LOWER_REPEATED;
+			}
 		}
 		else
+		{
+			SA_TIME_SET_INFINITE_TIME( wf->wait_time );
 			return SAGDP_RET_OK;
+		}
 	}
 	else // other states: ignore
 	{
 		SAGDP_ASSERT_NO_SEQUENCE;
+		SA_TIME_SET_INFINITE_TIME( wf->wait_time );
 		return SAGDP_RET_OK;
 	}
 }
