@@ -34,7 +34,7 @@ static 	SACCP_DATA saccp_data;
 void zepto_vm_init()
 {
 	uint16_t i;
-	for (i = 0; i < BODYPARTS_MAX; i++)
+	for (i = 0; i < SA_BODYPARTS_MAX; i++)
 	{
 		(( plugin_handler_config_fn)( ZEPTO_PROG_CONSTANT_READ_PTR( &(bodyparts[i].phi_fn) ) ) )( (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_config))), (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_state))) );
 	}
