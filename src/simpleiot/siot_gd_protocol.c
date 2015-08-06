@@ -134,11 +134,10 @@ uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_typ
 	{
 		INCREMENT_COUNTER( 20, "handlerSAGDP_timer(), packet resent" );
 
-//		if ( SAGDP_SHOULD_RESENT )
 		if ( sagdp_data.event_type == SAGDP_EV_RESEND_LSP ) // there is something to resend
 		{
 			bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(sagdp_data.next_event_time), &(wf->wait_time) );
-//			if ( sa_hal_time_val_is_less( &(sagdp_data.next_event_time), currt ) )
+
 			if ( time_still_remains ) // it's not a time for resending; just let themm know, when to wake us up basedcurrent schedule on 
 			{
 				// time difference (time to wait) is already loaded
@@ -154,6 +153,7 @@ uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_typ
 					return SAGDP_RET_NEED_NONCE;
 				INCREMENT_COUNTER( 60, "handler_sagdp_timer(), wait-remote" );
 
+				// important: this should be done after a nonce is requested through returning SAGDP_RET_NEED_NONCE
 				SAGDP_REGISTER_SUBSEQUENT_RESENT_AND_RESET_TIMEOUT
 
 				ZEPTO_DEBUG_PRINTF_7( "handler_sagdp_timer(): PID: %x%x%x%x%x%x\n", nonce[0], nonce[1], nonce[2], nonce[3], nonce[4], nonce[5] );
@@ -220,11 +220,18 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			}
 			else*/
 			{
-				zepto_write_uint8( mem_h, packet_status & SAGDP_P_STATUS_MASK );
+//				zepto_write_uint8( mem_h, packet_status & SAGDP_P_STATUS_MASK );
 			}
 
+			parser_obj po_start, po_end;
+			zepto_parser_init( &po_start, mem_h );
+			zepto_parser_init( &po_end, mem_h );
+			zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+			zepto_convert_part_of_request_to_response( mem_h, &po_start, &po_end );
+
 			sagdp_data.state = SAGDP_STATE_IDLE;
-			return SAGDP_RET_TO_HIGHER;
+//			return SAGDP_RET_TO_HIGHER;
+			return SAGDP_RET_SYS_CORRUPTED;
 		}
 		else if ( ( packet_status & SAGDP_P_STATUS_MASK ) == SAGDP_P_STATUS_IS_ACK )
 		{
@@ -300,6 +307,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			INCREMENT_COUNTER( 22, "handler_sagdp_receive_up(), idle, error message" );
 			// send an error message to a communication partner and reinitialize
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+			zepto_write_uint8( mem_h, state );
+			zepto_write_uint8( mem_h, packet_status );
 			// TODO: add other relevant data, if any, and update sizeInOut
 			sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 			ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
@@ -357,6 +367,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 					ZEPTO_DEBUG_ASSERT( ( packet_status & SAGDP_P_STATUS_MASK ) ==  SAGDP_P_STATUS_TERMINATING );
 					// send an error message to a communication partner and reinitialize
 					zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+					zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+					zepto_write_uint8( mem_h, state );
+					zepto_write_uint8( mem_h, packet_status );
 					// TODO: add other relevant data, if any, and update sizeInOut
 					sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 					ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
@@ -369,6 +382,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 				INCREMENT_COUNTER( 26, "handler_sagdp_receive_up(), idle, too old, sys corrupted" );
 				// send an error message to a communication partner and reinitialize
 				zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+				zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+				zepto_write_uint8( mem_h, state );
+				zepto_write_uint8( mem_h, packet_status );
 				// TODO: add other relevant data, if any, and update sizeInOut
 				sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 				ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
@@ -382,6 +398,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 				INCREMENT_COUNTER( 27, "handler_sagdp_receive_up(), idle, intermediate, sys corrupted" );
 				// send an error message to a communication partner and reinitialize
 				zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+				zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+				zepto_write_uint8( mem_h, state );
+				zepto_write_uint8( mem_h, packet_status );
 				// TODO: add other relevant data, if any, and update sizeInOut
 				sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 				ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
@@ -471,11 +490,18 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			}
 			else*/
 			{
-				zepto_write_uint8( mem_h, packet_status & SAGDP_P_STATUS_MASK );
+//				zepto_write_uint8( mem_h, packet_status & SAGDP_P_STATUS_MASK );
 			}
 
+			parser_obj po_start, po_end;
+			zepto_parser_init( &po_start, mem_h );
+			zepto_parser_init( &po_end, mem_h );
+			zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+			zepto_convert_part_of_request_to_response( mem_h, &po_start, &po_end );
+
 			sagdp_data.state = SAGDP_STATE_IDLE;
-			return SAGDP_RET_TO_HIGHER;
+//			return SAGDP_RET_TO_HIGHER;
+			return SAGDP_RET_SYS_CORRUPTED;
 		}
 		else if ( ( packet_status & SAGDP_P_STATUS_MASK ) == SAGDP_P_STATUS_IS_ACK )
 		{
@@ -618,6 +644,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 				return SAGDP_RET_NEED_NONCE;
 			INCREMENT_COUNTER( 40, "handler_sagdp_receive_up(), wait-remote, error" );
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+			zepto_write_uint8( mem_h, state );
+			zepto_write_uint8( mem_h, packet_status );
 			// TODO: add other relevant data, if any, and update sizeInOut
 			sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 			ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
@@ -743,6 +772,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 					return SAGDP_RET_NEED_NONCE;
 				INCREMENT_COUNTER( 46, "handler_sagdp_receive_up(), wait-remote, !is-reply, ignored" );
 				zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+				zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+				zepto_write_uint8( mem_h, state );
+				zepto_write_uint8( mem_h, packet_status );
 				// TODO: add other relevant data, if any, and update sizeInOut
 				sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 				ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d, !isreply\n", state, packet_status );
@@ -798,11 +830,18 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			}
 			else*/
 			{
-				zepto_write_uint8( mem_h, packet_status & SAGDP_P_STATUS_MASK );
+//				zepto_write_uint8( mem_h, packet_status & SAGDP_P_STATUS_MASK );
 			}
 
+			parser_obj po_start, po_end;
+			zepto_parser_init( &po_start, mem_h );
+			zepto_parser_init( &po_end, mem_h );
+			zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+			zepto_convert_part_of_request_to_response( mem_h, &po_start, &po_end );
+
 			sagdp_data.state = SAGDP_STATE_IDLE;
-			return SAGDP_RET_TO_HIGHER;
+//			return SAGDP_RET_TO_HIGHER;
+			return SAGDP_RET_SYS_CORRUPTED;
 		}
 		else if ( ( packet_status & SAGDP_P_STATUS_MASK ) == SAGDP_P_STATUS_IS_ACK )
 		{
@@ -882,6 +921,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 				return SAGDP_RET_NEED_NONCE;
 			INCREMENT_COUNTER( 40, "handler_sagdp_receive_up(), wait-remote, error" );
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+			zepto_write_uint8( mem_h, state );
+			zepto_write_uint8( mem_h, packet_status );
 			// TODO: add other relevant data, if any, and update sizeInOut
 			sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 			ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
@@ -965,6 +1007,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 					return SAGDP_RET_NEED_NONCE;
 				INCREMENT_COUNTER( 40, "handler_sagdp_receive_up(), wait-remote, error" );
 				zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+				zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+				zepto_write_uint8( mem_h, state );
+				zepto_write_uint8( mem_h, packet_status );
 				// TODO: add other relevant data, if any, and update sizeInOut
 				sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 				ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
@@ -982,6 +1027,9 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			return SAGDP_RET_NEED_NONCE;
 		// send an error message to a communication partner and reinitialize
 		zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+		zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+		zepto_write_uint8( mem_h, state );
+		zepto_write_uint8( mem_h, packet_status );
 #endif
 		// TODO: add other relevant data, if any, and update sizeInOut
 		sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
@@ -1060,6 +1108,9 @@ uint8_t handler_sagdp_receive_request_resend_lsp( sa_time_val* currt, waiting_fo
 		INCREMENT_COUNTER( 62, "handler_sagdp_receive_request_resend_lsp(), invalid state" );
 		// send an error message to a communication partner and reinitialize
 		zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+		zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+		zepto_write_uint8( mem_h, state );
+		zepto_write_uint8( mem_h, 0xFF ); // n/a; TODO: here and in other places: think about more extensive data
 		// TODO: add other relevant data, if any, and update sizeInOut
 		sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 		return SAGDP_RET_SYS_CORRUPTED;
@@ -1091,6 +1142,7 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 			// TODO: should we do anything else but error reporting?
 			// TODO: think about somehow detailed error report (say, at least, protocol state + packet status in chain)
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
 			zepto_write_uint8( mem_h, state );
 			zepto_write_uint8( mem_h, packet_status );
 #else
@@ -1099,6 +1151,9 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 				return SAGDP_RET_NEED_NONCE;
 
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+			zepto_write_uint8( mem_h, state );
+			zepto_write_uint8( mem_h, packet_status );
 			// TODO: add other relevant data, if any, and update sizeInOut
 			sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 #endif // USED_AS_MASTER
@@ -1194,6 +1249,9 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 			if ( nonce == NULL )
 				return SAGDP_RET_NEED_NONCE;
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+			zepto_write_uint8( mem_h, state );
+			zepto_write_uint8( mem_h, packet_status );
 			// TODO: add other relevant data, if any
 			sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 			INCREMENT_COUNTER( 73, "handler_sagdp_receive_hlp(), wait-remote, state/packet mismatch" );
@@ -1298,6 +1356,9 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 //			if ( nonce == NULL )
 				return SAGDP_RET_NEED_NONCE;
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+			zepto_write_uint8( mem_h, state );
+			zepto_write_uint8( mem_h, packet_status );
 			// TODO: add other relevant data, if any
 			sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 			INCREMENT_COUNTER( 73, "handler_sagdp_receive_hlp(), wait-remote, state/packet mismatch" );
@@ -1312,6 +1373,7 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 			// TODO: should we do anything else but error reporting?
 			// TODO: think about somehow detailed error report (say, at least, protocol state + packet status in chain)
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
 			zepto_write_uint8( mem_h, state );
 			zepto_write_uint8( mem_h, packet_status );
 #else
@@ -1320,6 +1382,9 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 				return SAGDP_RET_NEED_NONCE;
 
 			zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+			zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+			zepto_write_uint8( mem_h, state );
+			zepto_write_uint8( mem_h, packet_status );
 			// TODO: add other relevant data, if any, and update sizeInOut
 			sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
 #endif // USED_AS_MASTER
@@ -1340,6 +1405,9 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 			return SAGDP_RET_NEED_NONCE;
 		// send an error message to a communication partner and reinitialize
 		zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
+		zepto_write_uint8( mem_h, MASTER_SLAVE_BIT );
+		zepto_write_uint8( mem_h, state );
+		zepto_write_uint8( mem_h, packet_status );
 		// TODO: add other relevant data, if any, and update sizeInOut
 #endif
 		sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;

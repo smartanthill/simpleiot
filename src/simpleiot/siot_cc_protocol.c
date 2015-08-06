@@ -26,6 +26,9 @@ typedef struct _SACCP_DATA
 {
 	uint16_t next_command_offset; // after sleep to continue from
 	bool zepto_vm_mcusleep_invoked;
+	sa_time_val next_event_time;
+	uint8_t event_type; // one of time-related events
+	uint8_t first_byte;
 } SACCP_DATA;
 
 static 	SACCP_DATA saccp_data;
@@ -42,7 +45,7 @@ void zepto_vm_init()
 	saccp_data.zepto_vm_mcusleep_invoked = false;
 }
 
-void handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, waiting_for* wf )
+uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* currt, waiting_for* wf )
 {
 	parser_obj po, po1;
 	zepto_parser_init( &po, mem_h );
@@ -315,6 +318,8 @@ void handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, waiting_for* wf 
 		zepto_parser_encode_and_prepend_uint16( mem_h, reply_hdr );
 		zepto_write_prepend_byte( mem_h, reply_packet_in_chain_flags );
 	}
+
+	return SACCP_RET_DONE;
 }
 
 INLINE
@@ -342,12 +347,53 @@ void form_error_packet( MEMORY_HANDLE mem_h, uint8_t error_code, uint8_t incomin
 	}
 }
 
-uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, waiting_for* wf )
+uint8_t handler_saccp_timer( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa_time_val* currt, waiting_for* wf )
 {
+	uint8_t ret_code;
+
+	if ( saccp_data.event_type == 0 )
+		return SACCP_RET_NO_WAITING;
+
+	bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(saccp_data.next_event_time), &(wf->wait_time) );
+
+	if ( time_still_remains ) // it's not a time for resending; just let themm know, when to wake us up basedcurrent schedule on 
+	{
+		// time difference (time to wait) is already loaded
+		return SACCP_RET_WAIT;
+	}
+	else // time to continue processing
+	{
+		// we assume here that waiting can originate only from ZeptoVM; if not, adjust accordingly
+		ret_code = handler_zepto_vm( mem_h, saccp_data.first_byte, currt, wf ); // TODO: it can be implemented as an additional layer
+		if ( ret_code == SACCP_RET_DONE )
+		{
+			saccp_data.event_type = 0;
+			return ( (saccp_data.first_byte & SAGDP_P_STATUS_MASK) ==  SAGDP_P_STATUS_TERMINATING) ? SACCP_RET_DONE : SACCP_RET_PASS_LOWER;
+		}
+		else if ( ret_code == SACCP_RET_WAIT )
+		{
+			ZEPTO_DEBUG_ASSERT( saccp_data.event_type != 0 );
+			sa_hal_time_val_copy_from( &(saccp_data.next_event_time), currt );
+			return SACCP_RET_WAIT;
+		}
+		else
+		{
+			ZEPTO_DEBUG_PRINTF_2( "Error: unexpected return code %d from handler_zepto_vm()\n", ret_code );
+			ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected return code from handler_zepto_vm()\n" );
+			return SACCP_RET_FAILED;
+		}
+	}
+}
+
+uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa_time_val* currt, waiting_for* wf )
+{
+	uint8_t ret_code;
 	parser_obj po;
 	zepto_parser_init( &po, mem_h );
 
 	uint8_t first_byte = zepto_parse_uint8( &po );
+	saccp_data.first_byte = first_byte;
+	ZEPTO_DEBUG_ASSERT( saccp_data.event_type == 0 );
 	ZEPTO_DEBUG_PRINTF_2( "handler_saccp_receive(): first_byte = %d\n", first_byte );
 	uint8_t packet_head_byte = zepto_parse_uint8( &po );
 	uint8_t packet_type = packet_head_byte & 0x7; // TODO: use bit field processing instead
@@ -416,8 +462,22 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, wa
 			zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
 			zepto_response_to_request( mem_h );
 
-			handler_zepto_vm( mem_h, first_byte, wf ); // TODO: it can be implemented as an additional layer
-			return ( (first_byte & SAGDP_P_STATUS_MASK) ==  SAGDP_P_STATUS_TERMINATING) ? SACCP_RET_DONE : SACCP_RET_PASS_LOWER;
+			ret_code = handler_zepto_vm( mem_h, first_byte, currt, wf ); // TODO: it can be implemented as an additional layer
+			if ( ret_code == SACCP_RET_DONE )
+			{
+				return ( (first_byte & SAGDP_P_STATUS_MASK) ==  SAGDP_P_STATUS_TERMINATING) ? SACCP_RET_DONE : SACCP_RET_PASS_LOWER;
+			}
+			else if ( ret_code == SACCP_RET_WAIT )
+			{
+				saccp_data.event_type = 1;
+				sa_hal_time_val_copy_from( &(saccp_data.next_event_time), currt );
+				return SACCP_RET_WAIT;
+			}
+			else
+			{
+				ZEPTO_DEBUG_PRINTF_2( "Error: unexpected return code %d from handler_zepto_vm()\n", ret_code );
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected return code from handler_zepto_vm()\n" );
+			}
 			break;
 		}
 		case SACCP_REPEAT_OLD_PROGRAM:
