@@ -43,6 +43,7 @@ void zepto_vm_init()
 	}
 	saccp_data.next_command_offset = 0;
 	saccp_data.zepto_vm_mcusleep_invoked = false;
+	saccp_data.event_type = 0;
 }
 
 uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* currt, waiting_for* wf )
