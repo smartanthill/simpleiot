@@ -26,13 +26,13 @@ typedef uint8_t sa_uint48_t[6];
 INLINE
 void sa_uint48_set_zero( sa_uint48_t t )
 {
-	memset( t, 0, 6 );
+	ZEPTO_MEMSET( t, 0, 6 );
 }
 
 INLINE
 void sa_uint48_init_by( sa_uint48_t t, const sa_uint48_t t_src )
 {
-	memcpy( t, t_src, 6 );
+	ZEPTO_MEMCPY( t, t_src, 6 );
 }
 
 INLINE

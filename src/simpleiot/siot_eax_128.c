@@ -37,7 +37,7 @@ void eax_128_galois_times_2( uint8_t * buff )
 void eax_128_generate_B( const uint8_t* key, uint8_t * buff )
 {
 	uint8_t zero[16];
-	memset( zero, 0, 16 );
+	ZEPTO_MEMSET( zero, 0, 16 );
 	sa_aes_128_encrypt_block( key, zero, buff );
 	eax_128_galois_times_2( buff );
 }
@@ -45,7 +45,7 @@ void eax_128_generate_B( const uint8_t* key, uint8_t * buff )
 void eax_128_generate_P( const uint8_t* key, uint8_t * buff )
 {
 	uint8_t zero[16];
-	memset( zero, 0, 16 );
+	ZEPTO_MEMSET( zero, 0, 16 );
 	sa_aes_128_encrypt_block( key, zero, buff );
 	eax_128_galois_times_2( buff );
 	eax_128_galois_times_2( buff );
@@ -75,7 +75,7 @@ void eax_128_pad_block( const uint8_t* key, const uint8_t * block_in, uint8_t sz
 
 void eax_128_init_cbc( uint8_t* state )
 {
-	memset( state, 0, 16 );
+	ZEPTO_MEMSET( state, 0, 16 );
 }
 
 void eax_128_update_cbc( const uint8_t* key, const uint8_t* block, uint8_t* cbc )
@@ -91,7 +91,7 @@ void eax_128_omac_t_of_single_block_message( const uint8_t* key, uint8_t t, cons
 {
 	ZEPTO_DEBUG_ASSERT( sz <= 16 );
 	uint8_t t_blk[16];
-	memset( t_blk, 0, 16 );
+	ZEPTO_MEMSET( t_blk, 0, 16 );
 	t_blk[15] = t;
 	uint8_t state[16];
 	if ( sz )
@@ -109,7 +109,7 @@ void eax_128_omac_t_of_single_block_message( const uint8_t* key, uint8_t t, cons
 		eax_128_pad_block( key, t_blk, 16, t_blk );
 		eax_128_update_cbc( key, t_blk, state );
 	}
-	memcpy( block_out, state, 16 );
+	ZEPTO_MEMCPY( block_out, state, 16 );
 }
 
 void eax_128_ctr_encrypt_and_step_ctr( const uint8_t* key, uint8_t* ctr, const uint8_t* block_in, uint8_t* block_out )
@@ -130,14 +130,14 @@ void eax_128_ctr_encrypt_and_step_ctr( const uint8_t* key, uint8_t* ctr, const u
 void eax_128_init_ctr( const uint8_t* key, const uint8_t* nonce, uint8_t nonce_sz, uint8_t* ctr, uint8_t* tag_out )
 {
 	eax_128_omac_t_of_single_block_message( key, 0, nonce, nonce_sz, ctr );
-	memcpy( tag_out, ctr, 16 );
+	ZEPTO_MEMCPY( tag_out, ctr, 16 );
 }
 
 void eax_128_init_cbc_for_nonzero_msg( const uint8_t* key, uint8_t* msg_cbc_val )
 {
-	memset( msg_cbc_val, 0, 16 ); // init cbc
+	ZEPTO_MEMSET( msg_cbc_val, 0, 16 ); // init cbc
 	uint8_t t_blk[16];
-	memset( t_blk, 0, 16 );
+	ZEPTO_MEMSET( t_blk, 0, 16 );
 	t_blk[15] = 2;
 	eax_128_update_cbc( key, t_blk, msg_cbc_val );
 }
@@ -157,7 +157,7 @@ void eax_128_process_terminating_block_encr( const uint8_t* key, uint8_t* ctr, c
 {
 	ZEPTO_DEBUG_ASSERT( sz != 0 );
 	uint8_t t_blk[16];
-	memcpy( t_blk, block_in, sz ); // just to ensure that a full-size block is formed
+	ZEPTO_MEMCPY( t_blk, block_in, sz ); // just to ensure that a full-size block is formed
 	eax_128_ctr_encrypt_and_step_ctr( key, ctr, t_blk, block_out );
 	// pad for omac
 	eax_128_pad_block( key, block_out, sz, t_blk );
@@ -178,7 +178,7 @@ void eax_128_process_terminating_block_decr( const uint8_t* key, uint8_t* ctr, c
 	eax_128_pad_block( key, block_in, sz, t_blk );
 	eax_128_update_cbc( key, t_blk, msg_cbc_val );
 	// decrypt
-	memcpy( t_blk, block_in, sz ); // just to ensure that a full-size block is formed
+	ZEPTO_MEMCPY( t_blk, block_in, sz ); // just to ensure that a full-size block is formed
 	eax_128_ctr_encrypt_and_step_ctr( key, ctr, t_blk, block_out );
 }
 
@@ -212,7 +212,7 @@ void eax_128_calc_tag_of_zero_msg( const uint8_t* key, const uint8_t* header, ui
 	uint8_t msg_cbc_val[16];
 	eax_128_init_ctr( key, nonce, nonce_sz, msg_cbc_val, tag ); // get cbc of nonce
 
-	memset( tmp, 0, 16 );
+	ZEPTO_MEMSET( tmp, 0, 16 );
 	tmp[15] = 2;
 
 	eax_128_init_cbc( msg_cbc_val );

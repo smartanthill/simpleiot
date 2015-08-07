@@ -47,7 +47,7 @@ void SASP_increment_nonce_last_sent( /*SASP_DATA* sasp_data*/ )
 	if ( sa_uint48_get_byte( sasp_data.nonce_ls, 0 ) == 1 )
 	{
 		sasp_nonce_type future;
-		memcpy( future, sasp_data.nonce_ls, SASP_NONCE_TYPE_SIZE );
+		ZEPTO_MEMCPY( future, sasp_data.nonce_ls, SASP_NONCE_TYPE_SIZE );
 		sa_uint48_roundup_to_the_nearest_multiple_of_0x100( future );
 		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, future );
 	}
@@ -70,7 +70,7 @@ void SASP_update_nonce_low_watermark( /*SASP_DATA* sasp_data, */const sasp_nonce
 INLINE
 void SASP_make_nonce_for_encryption( const sasp_nonce_type packet_id, uint8_t master_slave_bit, uint8_t nonce[16] )
 {
-	memset( nonce, 0, 16 );
+	ZEPTO_MEMSET( nonce, 0, 16 );
 	int8_t i;
 	for ( i=0; i<SASP_NONCE_TYPE_SIZE; i++ )
 	{
@@ -274,7 +274,7 @@ void DEBUG_SASP_EncryptAndAddAuthenticationDataChecked( MEMORY_HANDLE mem_h, con
 	ZEPTO_DEBUG_PRINTF_7( "handler_sasp_send(): dbg_nonce: %02x %02x %02x %02x %02x %02x\n", dbg_nonce[0], dbg_nonce[1], dbg_nonce[2], dbg_nonce[3], dbg_nonce[4], dbg_nonce[5] );
 	ZEPTO_DEBUG_ASSERT( ipaad );
 	ZEPTO_DEBUG_ASSERT( decr_sz == inisz );
-	ZEPTO_DEBUG_ASSERT( memcmp( nonce, dbg_nonce, 6 ) == 0 );
+	ZEPTO_DEBUG_ASSERT( ZEPTO_MEMCMP( nonce, dbg_nonce, 6 ) == 0 );
 	uint8_t k;
 	for ( k=0; k<decr_sz; k++ )
 		ZEPTO_DEBUG_ASSERT( inimsg[k] == checkedMsg[k] );
@@ -343,7 +343,7 @@ uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE me
 		if ( nonceCmp < 0 )
 		{
 			INCREMENT_COUNTER( 14, "handler_sasp_receive(), nonce las updated" );
-			memcpy( nls, new_nls, SASP_NONCE_SIZE );
+			ZEPTO_MEMCPY( nls, new_nls, SASP_NONCE_SIZE );
 //			sa_uint48_increment( sasp_data.nonce_ls );
 			SASP_increment_nonce_last_sent( /*sasp_data*/ );
 			// TODO: shuold we do anything else?
@@ -373,7 +373,7 @@ uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE me
 		zepto_response_to_request( mem_h );
 
 		uint8_t ne[ SASP_HEADER_SIZE ];
-		memcpy( ne, pid, SASP_NONCE_SIZE );
+		ZEPTO_MEMCPY( ne, pid, SASP_NONCE_SIZE );
 		SASP_EncryptAndAddAuthenticationData( mem_h,key, ne );
 		ZEPTO_DEBUG_PRINTF_1( "handler_sasp_receive(): ------------------- ERROR OLD NONCE WILL BE SENT ----------------------\n" );
 //		ZEPTO_DEBUG_ASSERT( ugly_hook_get_response_size( mem_h ) <= 39 );

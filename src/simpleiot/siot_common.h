@@ -21,7 +21,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 // common includes
 //#include <memory.h> // for memcpy(), memset(), memcmp(). Note: their implementation may or may not be more effective than just by-byte operation on a particular target platform
-#include <string.h> // for memmove()
+//#include <string.h> // for memmove()
 #include <hal_platform.h>
 
 // compiler-specific: disabling certain warnings
@@ -83,8 +83,32 @@ INLINE void zepto_memcpy( void* dest, const void* src, uint16_t cnt )
 		((uint8_t*)dest)[i] = ((uint8_t*)src)[i];
 }
 
+INLINE int8_t zepto_memcmp( const void* s1, const void* s2, uint16_t cnt )
+{
+	uint16_t i;
+	for ( i=0; i<cnt; i++ )
+	{
+		if ( ((uint8_t*)s1)[i] > ((uint8_t*)s2)[i] ) return 1;
+		if ( ((uint8_t*)s1)[i] < ((uint8_t*)s2)[i] ) return (int8_t)(-1);
+	}
+	return 0;
+}
+
+INLINE void zepto_memmov( void* dest, const void* src, uint16_t cnt )
+{
+	uint16_t i;
+	if ( dest <= src )
+		for ( i=0; i<cnt; i++ )
+			((uint8_t*)dest)[i] = ((uint8_t*)src)[i];
+	else
+		for ( i=cnt; i>0; i-- )
+			((uint8_t*)dest)[i-1] = ((uint8_t*)src)[i-1];
+}
+
 #define ZEPTO_MEMSET zepto_memset
 #define ZEPTO_MEMCPY zepto_memcpy
+#define ZEPTO_MEMMOV zepto_memmov
+#define ZEPTO_MEMCMP zepto_memcmp
 
 #ifndef ZEPTO_PROG_CONSTANT_LOCATION
 #define ZEPTO_PROG_CONSTANT_LOCATION

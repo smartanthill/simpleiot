@@ -107,7 +107,7 @@ void sa_aes_128_mixColumns(uint8_t* block)
 void sa_aes_128_encrypt_block( const uint8_t* key, const uint8_t* _block, uint8_t* res )
 {
 	uint8_t block[16], ksc[16];
-    memcpy( block, _block, 16 );
+    ZEPTO_MEMCPY( block, _block, 16 );
 	ZEPTO_MEMCPY_FROM_PROGMEM( ksc, key, 16 );
 	uint8_t rcon = 1;
 
@@ -137,6 +137,6 @@ void sa_aes_128_encrypt_block( const uint8_t* key, const uint8_t* _block, uint8_
     for (i = 0; i < 16; (i)++) // add round key
         block[i] ^= ksc[i];
 
-	memcpy( res, block, 16 );
+	ZEPTO_MEMCPY( res, block, 16 );
 }
 

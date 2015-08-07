@@ -786,7 +786,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			{
 				INCREMENT_COUNTER( 48, "handler_sagdp_receive_up(), wait-remote, other, intermediate" );
 				ZEPTO_DEBUG_PRINTF_7( "handler_sagdp_receive_hlp(): PID of packet (LRECEIVED): %x%x%x%x%x%x\n", pid[0], pid[1], pid[2], pid[3], pid[4], pid[5] );
-//				memcpy( data + DATA_SAGDP_LRECEIVED_PID_OFFSET, pid, SAGDP_LRECEIVED_PID_SIZE );
+//				ZEPTO_MEMCPY( data + DATA_SAGDP_LRECEIVED_PID_OFFSET, pid, SAGDP_LRECEIVED_PID_SIZE );
 				sa_uint48_init_by( sagdp_data.last_received_packet_id, pid );
 			}
 			// form a packet for higher level
