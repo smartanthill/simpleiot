@@ -59,7 +59,7 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 	uint8_t MAX_TTL;
 	uint8_t FORWARD_TO_SANTA_DELAY_UNIT;
 	uint8_t FORWARD_TO_SANTA_DELAY;
-	uint8_t MAX_FORWARD_TO_SANTA_DELAY; // (using same units as FORWARD-TO-SANTA-DELAY); indicates maximum “forward to santa” delay for all Retransmitting Devices in the PAN.
+	uint8_t MAX_FORWARD_TO_SANTA_DELAY; // (using same units as FORWARD-TO-SANTA-DELAY); indicates maximum "forward to santa" delay for all Retransmitting Devices in the PAN.
 	uint8_t NODE_MAX_RANDOM_DELAY_UNIT;
 	uint8_t NODE_MAX_RANDOM_DELAY;
 } SIOT_MESH_RETRANSM_COMMON_DATA;

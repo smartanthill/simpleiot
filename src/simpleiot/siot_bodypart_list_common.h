@@ -22,15 +22,22 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "siot_common.h"
 #include "siot_data_types.h"
 #include "../simpleiot_hal/siot_mem_mngmt.h"
+#include "../simpleiot_hal/hal_waiting.h"
 
-typedef uint8_t (*plugin_handler_config_fn)(const void* plugin_config, void* plugin_state);
-typedef uint8_t (*plugin_handler_fn)( const void* plugin_config, void* plugin_state, parser_obj* command, MEMORY_HANDLE reply/*, WaitingFor* waiting_for*/, uint8_t first_byte );
+#define PLUGIN_OK 0
+#define PLUGIN_WAIT_TO_CONTINUE 1
+
+typedef uint8_t (*plugin_handler_config_fn)(const void* plugin_config, void* plugin_persistent_state);
+typedef uint8_t (*plugin_exec_init_fn)(const void* plugin_config, void* plugin_state);
+typedef uint8_t (*plugin_exec_fn)( const void* plugin_config, void* plugin_persistent_state, void* plugin_state, parser_obj* command, MEMORY_HANDLE reply, waiting_for* wf, uint8_t first_byte );
 
 typedef struct _bodypart_item
 {
-	plugin_handler_config_fn phi_fn;
-	plugin_handler_fn ph_fn;
+	plugin_handler_config_fn ph_config_fn;
+	plugin_exec_init_fn ph_exec_init_fn;
+	plugin_exec_fn ph_exec_fn;
 	void* ph_config;
+	void* ph_persistent_state;
 	void* ph_state;
 } bodypart_item;
 

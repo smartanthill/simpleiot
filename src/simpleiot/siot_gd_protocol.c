@@ -692,7 +692,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			{
 				INCREMENT_COUNTER( 43, "handler_sagdp_receive_up(), wait-remote, first, new (applied)" );
 				sagdp_data.state = SAGDP_STATE_NOT_INITIALIZED;
-				ZEPTO_DEBUG_PRINTF_3( "SAGDP: CORRRUPTED: state = %d, packet_status = %d\n", state, packet_status );
+				ZEPTO_DEBUG_PRINTF_3( "SAGDP: SEQUENCE PREEMPTED (state = %d, packet_status = %d)\n", state, packet_status );
 				SAGDP_CANCEL_RESENT_SEQUENCE
 				// cleanup
 				zepto_parser_free_memory( MEMORY_HANDLE_SAGDP_LSM );
@@ -1367,8 +1367,8 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 		}
 		else // any but first
 		{
-			ZEPTO_DEBUG_ASSERT( ( packet_status & ( SAGDP_P_STATUS_FIRST | SAGDP_P_STATUS_TERMINATING ) ) == SAGDP_P_STATUS_FIRST ); // in idle state we can expect only "first" packet
-			ZEPTO_DEBUG_ASSERT( packet_status == SAGDP_P_STATUS_FIRST );
+//			ZEPTO_DEBUG_ASSERT( ( packet_status & ( SAGDP_P_STATUS_FIRST | SAGDP_P_STATUS_TERMINATING ) ) == SAGDP_P_STATUS_FIRST ); // in idle state we can expect only "first" packet
+//			ZEPTO_DEBUG_ASSERT( packet_status == SAGDP_P_STATUS_FIRST );
 #ifdef USED_AS_MASTER
 			// TODO: should we do anything else but error reporting?
 			// TODO: think about somehow detailed error report (say, at least, protocol state + packet status in chain)

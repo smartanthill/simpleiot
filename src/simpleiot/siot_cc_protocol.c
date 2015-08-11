@@ -39,7 +39,7 @@ void zepto_vm_init()
 	uint16_t i;
 	for (i = 0; i < ZEPTO_PROG_CONSTANT_READ_BYTE( &SA_BODYPARTS_MAX ); i++)
 	{
-		(( plugin_handler_config_fn)( ZEPTO_PROG_CONSTANT_READ_PTR( &(bodyparts[i].phi_fn) ) ) )( (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_config))), (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_state))) );
+		(( plugin_handler_config_fn)( ZEPTO_PROG_CONSTANT_READ_PTR( &(bodyparts[i].ph_config_fn) ) ) )( (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_config))), (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_persistent_state))) );
 	}
 	saccp_data.next_command_offset = 0;
 	saccp_data.zepto_vm_mcusleep_invoked = false;
@@ -51,6 +51,13 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 	parser_obj po, po1;
 	zepto_parser_init( &po, mem_h );
 
+	uint16_t i;
+	for (i = 0; i < ZEPTO_PROG_CONSTANT_READ_BYTE( &SA_BODYPARTS_MAX ); i++)
+	{
+		(( plugin_exec_init_fn)( ZEPTO_PROG_CONSTANT_READ_PTR( &(bodyparts[i].ph_exec_init_fn) ) ) )( (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_config))), (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[i].ph_state))) );
+	}
+
+	uint16_t packet_ini_sz = zepto_parsing_remaining_bytes( &po ); // will be used for calculculation of next_command_offset
 	if ( saccp_data.next_command_offset != 0 )
 	{
 		ZEPTO_DEBUG_ASSERT( saccp_data.next_command_offset <= zepto_parsing_remaining_bytes( &po ) );
@@ -58,6 +65,7 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 	}
 
 	uint8_t op_code;
+	uint8_t ret_code;
 	bool explicit_exit_called = false;
 	uint8_t reply_packet_in_chain_flags = SAGDP_P_STATUS_TERMINATING;
 	do
@@ -79,8 +87,20 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 				zepto_write_uint8( mem_h, FRAME_TYPE_DESCRIPTOR_REGULAR ); // start of a "regular" plugin frame
 				zepto_parser_init_by_parser( &po1, &po );
 				zepto_parse_skip_block( &po, data_sz );
-				(( plugin_handler_fn)( ZEPTO_PROG_CONSTANT_READ_PTR( &(bodyparts[body_part].ph_fn) ) ) )( (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[body_part].ph_config))), (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[body_part].ph_state))), &po1, mem_h/*, WaitingFor* waiting_for*/, first_byte );
+				ret_code = (( plugin_exec_fn)( ZEPTO_PROG_CONSTANT_READ_PTR( &(bodyparts[body_part].ph_exec_fn) ) ) )( (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[body_part].ph_config))), (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[body_part].ph_persistent_state))), (void*)(ZEPTO_PROG_CONSTANT_READ_PTR(&(bodyparts[body_part].ph_state))), &po1, mem_h, wf, first_byte );
+				if ( ret_code == PLUGIN_OK )
+				{
+					break;
+				}
+				else
+				{
+					ZEPTO_DEBUG_ASSERT( ret_code == PLUGIN_WAIT_TO_CONTINUE );
+					saccp_data.next_command_offset = packet_ini_sz - zepto_parsing_remaining_bytes( &po ); // offset of the current command
+					saccp_data.event_type = 1;
+					return SACCP_RET_WAIT;
+				}
 #else // ZEPTO_VM_USE_SIMPLE_FRAME
+#error this branch requires to be revised; waiting is not implemented (see the other branch as a sample)
 				zepto_parser_init_by_parser( &po1, &po );
 //				zepto_parse_skip_block( &po, zepto_parsing_remaining_bytes( &po ) );
 				zepto_parse_skip_block( &po, data_sz );
@@ -99,8 +119,8 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 
 				zepto_append_response_to_response_of_another_handle( MEMORY_HANDLE_DEFAULT_PLUGIN, mem_h );
 				zepto_parser_free_memory( MEMORY_HANDLE_DEFAULT_PLUGIN );
-#endif // ZEPTO_VM_USE_SIMPLE_FRAME
 				break;
+#endif // ZEPTO_VM_USE_SIMPLE_FRAME
 			}
 			case ZEPTOVM_OP_EXIT:
 			{
