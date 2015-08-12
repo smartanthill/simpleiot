@@ -729,7 +729,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 //						return SAGDP_RET_NEED_NONCE;
 					INCREMENT_COUNTER( 44, "handler_sagdp_receive_up(), wait-remote, is-old, resend requested" );
 
-					ZEPTO_DEBUG_PRINTF_7( "handler_sagdp_receive_up(): nonce: %x%x%x%x%x%x\n", nonce[0], nonce[1], nonce[2], nonce[3], nonce[4], nonce[5] );
+//					ZEPTO_DEBUG_PRINTF_7( "handler_sagdp_receive_up(): nonce: %x%x%x%x%x%x\n", nonce[0], nonce[1], nonce[2], nonce[3], nonce[4], nonce[5] );
 
 					// apply nonce
 //					sa_uint48_init_by( sagdp_data.next_last_sent_packet_id, nonce );
@@ -1266,13 +1266,36 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 			ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receivePID(): PID: %x%x%x%x%x%x\n", nonce[0], nonce[1], nonce[2], nonce[3], nonce[4], nonce[5] );
 
 			// apply nonce
-			bool is_prev = sa_uint48_compare( sagdp_data.first_last_sent_packet_id, sagdp_data.next_last_sent_packet_id ) != 0;
+#ifdef SA_DEBUG
+			{
+				uint8_t* pidprevlsent_first = sagdp_data.prev_first_last_sent_packet_id;
+				uint8_t* pidlsent_first = sagdp_data.first_last_sent_packet_id;
+				uint8_t* pidlsent_last = sagdp_data.next_last_sent_packet_id;
+				ZEPTO_DEBUG_PRINTF_1( "Before applying a nonce for the packet:\n" );
+				ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP(): prev PID last sent first   : %x%x%x%x%x%x\n", pidprevlsent_first[0], pidprevlsent_first[1], pidprevlsent_first[2], pidprevlsent_first[3], pidprevlsent_first[4], pidprevlsent_first[5] );
+				ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP():      PID last sent first   : %x%x%x%x%x%x\n", pidlsent_first[0], pidlsent_first[1], pidlsent_first[2], pidlsent_first[3], pidlsent_first[4], pidlsent_first[5] );
+				ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP():      PID last sent last    : %x%x%x%x%x%x\n", pidlsent_last[0], pidlsent_last[1], pidlsent_last[2], pidlsent_last[3], pidlsent_last[4], pidlsent_last[5] );
+			}
+#endif
+//			bool is_prev = sa_uint48_compare( sagdp_data.first_last_sent_packet_id, sagdp_data.next_last_sent_packet_id ) != 0;
+			bool is_prev = ! is_uint48_zero( sagdp_data.next_last_sent_packet_id );
 			if ( is_prev )
 				sa_uint48_init_by( sagdp_data.prev_first_last_sent_packet_id, sagdp_data.first_last_sent_packet_id );
 			else
 				sa_uint48_init_by( sagdp_data.prev_first_last_sent_packet_id, nonce );
 			sa_uint48_init_by( sagdp_data.first_last_sent_packet_id, nonce );
 			sa_uint48_init_by( sagdp_data.next_last_sent_packet_id, nonce );
+#ifdef SA_DEBUG
+			{
+				uint8_t* pidprevlsent_first = sagdp_data.prev_first_last_sent_packet_id;
+				uint8_t* pidlsent_first = sagdp_data.first_last_sent_packet_id;
+				uint8_t* pidlsent_last = sagdp_data.next_last_sent_packet_id;
+				ZEPTO_DEBUG_PRINTF_1( "Right before sending a packet:\n" );
+				ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP(): prev PID last sent first   : %x%x%x%x%x%x\n", pidprevlsent_first[0], pidprevlsent_first[1], pidprevlsent_first[2], pidprevlsent_first[3], pidprevlsent_first[4], pidprevlsent_first[5] );
+				ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP():      PID last sent first   : %x%x%x%x%x%x\n", pidlsent_first[0], pidlsent_first[1], pidlsent_first[2], pidlsent_first[3], pidlsent_first[4], pidlsent_first[5] );
+				ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP():      PID last sent last    : %x%x%x%x%x%x\n", pidlsent_last[0], pidlsent_last[1], pidlsent_last[2], pidlsent_last[3], pidlsent_last[4], pidlsent_last[5] );
+			}
+#endif
 
 			// form a UP packet
 			ZEPTO_DEBUG_ASSERT( ( packet_status & ( ~( SAGDP_P_STATUS_FIRST | SAGDP_P_STATUS_TERMINATING ) ) ) == 0 ); // TODO: can we rely on sanity of the caller?
