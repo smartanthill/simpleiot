@@ -18,6 +18,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "siot_m_protocol.h"
 #include "../simpleiot_hal/siot_mem_mngmt.h"
 
+//DECLARE_DEVICE_ID
 
 #define SIOT_MESH_LINK_TABLE_SIZE_MAX 256
 #define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 256
@@ -87,10 +88,31 @@ uint8_t siot_mesh_add_link_id( uint8_t target_id, uint8_t link_id )
 	return SIOT_MESH_RET_ERROR_NOT_FOUND;
 }
 
-uint8_t siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
+uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t sz, uint16_t accum_val )
+{
+	uint16_t i;
+	for ( i=offset; i<offset+sz; i++ )
+	{
+		accum_val += memory_object_read_response_byte( mem_h, i ); // do something simple for a while
+		// TODO: actual implementation
+	}
+	return accum_val;
+}
+
+uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val )
 {
 	parser_obj po;
+	zepto_parser_init_by_parser( &po, po_start );
+	return 0;
+}
+
+uint8_t siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
+{
+	parser_obj po, po1, po2;
 	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
+
 	uint16_t header = zepto_parse_encoded_uint16( &po );
 	// TODO: here and then use bit-field processing instead
 	if ( header & 1 ) // predefined packet types
@@ -100,11 +122,13 @@ uint8_t siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 		{
 			case SIOT_MESH_FROM_SANTA_DATA_PACKET:
 			{
+				// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
 				bool extra_headers_present = ( header >> 4 ) & 0x1;
 				uint16_t TTL = header >> 5;
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
+					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'FROM-SANTA\' packet are not yet implemented" );
 					header = zepto_parse_encoded_uint16( &po );
 					extra_headers_present = header & 0x1;
 					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
@@ -117,6 +141,74 @@ uint8_t siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 						{
 							ZEPTO_DEBUG_ASSERT( NULL == "Error: not implemented\n" );
 							break;
+						}
+					}
+				}
+
+				// LAST-HOP
+				uint16_t last_hop = zepto_parse_encoded_uint16( &po );
+				ZEPTO_DEBUG_ASSERT( last_hop == 0 ); // as long as we have not implemented and do not expect other options
+
+				// REQUEST-ID
+				uint32_t rq_id = zepto_parse_encoded_uint32( &po );
+				ZEPTO_DEBUG_ASSERT( rq_id == 0 ); // as long as we have not implemented and do not expect other options
+
+				// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
+
+				// MULTIPLE-RETRANSMITTING-ADDRESSES 
+				// just adding terminator...
+				header = zepto_parse_encoded_uint16( &po );
+				ZEPTO_DEBUG_ASSERT( header == 1 ); // just terminator
+
+				// BROADCAST-BUS-TYPE-LIST
+				// TODO: what should we add here?
+				uint8_t bus_type = zepto_parse_uint8( &po );
+				while ( bus_type != 0 ) // 0 is a terminator
+				{
+					ZEPTO_DEBUG_ASSERT( 0 == "we have not implemented yet anything with non-empty list" );
+					// do something
+					bus_type = zepto_parse_uint8( &po );
+				}
+
+				// Target-Address
+				header = zepto_parse_encoded_uint16( &po );
+				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
+				uint16_t target_id = header >> 1;
+
+				// TODO: compare with self-id
+				// OPTIONAL-TARGET-REPLY-DELAY
+
+				// OPTIONAL-PAYLOAD-SIZE
+
+				// HEADER-CHECKSUM
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+				zepto_parser_init_by_parser( &po1, &po );
+
+
+				if ( actual_checksum != checksum )
+				{
+					// TODO: we have not received even a header
+				}
+				else
+				{
+					uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+					if ( remaining_size >= 2 )
+					{
+						zepto_parser_init_by_parser( &po2, &po );
+						zepto_parse_skip_block( &po, remaining_size - 2 );
+						zepto_append_part_of_request_to_response( mem_h, &po2, &po );
+						actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
+						checksum = zepto_parse_uint8( &po );
+						checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+						if ( actual_checksum != checksum )
+						{
+							// TODO: we have only a partially received packet
+						}
+						else
+						{
+							// TODO: we're done
 						}
 					}
 				}
@@ -139,13 +231,63 @@ uint8_t siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 	return SIOT_MESH_RET_OK;
 }
 
-uint8_t siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
+void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
 {
+	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+	// TODO: here and then use bit-field processing instead
+
 	parser_obj po, po1;
+
+	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
+	uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( 4 << 5 ); // '1', packet type, 0 (no extra headers), TTL = 4
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+
+	// LAST-HOP
+	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // TODO: is it a self-ID? Then for Client it is 0, and some unique velue for other devices. SOURCE???
+
+	// REQUEST-ID
+	uint32_t rq_id = 0; // REQUEST-ID
+	zepto_parser_encode_and_append_uint32( mem_h, 0 ); // REQUEST-ID
+
+	// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
+
+	// MULTIPLE-RETRANSMITTING-ADDRESSES 
+	// just adding terminator...
+	header = 1 | 0; // TODO: Check that this interpretation is correct !!!!!!!!!!!!!
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+
+	// BROADCAST-BUS-TYPE-LIST
+	// TODO: what should we add here?
+	zepto_write_uint8( mem_h, 0 ); // list terminator
+
+	// Target-Address
+	header = 0 | ( target_id << 1 ); // NODE-ID, no more data
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+
+	// OPTIONAL-TARGET-REPLY-DELAY
+
+	// OPTIONAL-PAYLOAD-SIZE
+
+	// HEADER-CHECKSUM
+	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
+	uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, 0, rsp_sz, 0 );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+
+	// PAYLOAD
 	zepto_parser_init( &po, mem_h );
 	zepto_parser_init( &po1, mem_h );
 	zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
+	zepto_append_part_of_request_to_response( mem_h, &po, &po1 );
+
+	// FULL-CHECKSUM
+	checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ), checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+}
+
+uint8_t siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
+{
 	uint8_t link_id;
 	uint8_t ret_code = siot_mesh_get_link_id( target_id, &link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
@@ -157,18 +299,8 @@ uint8_t siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
 	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
 
 	// packet "from Santa" will be sent... let's form a packet
-	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
-	// TODO: here and then use bit-field processing instead
-	uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( 4 << 5 ); // '1', packet type, 0 (no extra headers), TTL = 4
-	zepto_parser_encode_and_append_uint16( mem_h, header );
-	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // LAST-HOP
-	// WARNING!!! REQUEST-ID is a 4-byte value; when actually implemented, switch to 4-byte immediately
-//	uint32_t rq_id = 0; // REQUEST-ID
-//	zepto_parser_encode_and_append_uint( mem_h, &rq_id, 4 );
-	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // REQUEST-ID
-	// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
+	siot_mesh_form_packet_from_santa( mem_h, target_id );
 
-	// MULTIPLE-RETRANSMITTING-ADDRESSES 
 
 	return SIOT_MESH_RET_OK;
 }

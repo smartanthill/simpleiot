@@ -128,6 +128,7 @@ INLINE int16_t zepto_parse_encoded_signed_int16( parser_obj* po )
 	uint16_t ux = zepto_parse_encoded_uint16( po );
 	return (int16_t)((ux >> 1) ^ (-(ux & 1)));
 }
+uint32_t zepto_parse_encoded_uint32( parser_obj* po );
 void zepto_parser_decode_uint( parser_obj* po, uint8_t* bytes_out, uint8_t target_size );
 
 void zepto_parser_encode_and_append_uint16( MEMORY_HANDLE mem_h, uint16_t num );
@@ -136,7 +137,13 @@ INLINE void zepto_parser_encode_and_append_signed_int16( MEMORY_HANDLE mem_h, in
 	uint16_t ux = (uint16_t)((sx << 1) ^ (sx>>15));
 	zepto_parser_encode_and_append_uint16( mem_h, ux );
 }
+void zepto_parser_encode_and_append_uint32( MEMORY_HANDLE mem_h, uint32_t num );
 void zepto_parser_encode_and_append_uint( MEMORY_HANDLE mem_h, const uint8_t* num_bytes, uint8_t num_sz_max );
 void zepto_parser_encode_and_prepend_uint16( MEMORY_HANDLE mem_h, uint16_t num );
 void zepto_parser_encode_and_prepend_uint( MEMORY_HANDLE mem_h, const uint8_t* num_bytes, uint8_t num_sz_max );
+
+uint16_t memory_object_get_request_size( REQUEST_REPLY_HANDLE mem_h );
+uint16_t memory_object_get_response_size( REQUEST_REPLY_HANDLE mem_h );
+uint8_t memory_object_read_response_byte( REQUEST_REPLY_HANDLE mem_h, uint16_t offset );
+
 #endif // __SIOT_MEM_MNGMT_H__
