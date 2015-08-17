@@ -9,7 +9,7 @@ Copyright (C) 2015 OLogN Technologies AG
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
-ZEPTO_MEMMOV
+
     You should have received a copy of the GNU General Public License along
     with this program; if not, write to the Free Software Foundation, Inc.,
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
@@ -20,6 +20,7 @@ ZEPTO_MEMMOV
 #define __SIOT_M_PROTOCOL_H__
 
 #include "siot_common.h"
+#include "../simpleiot_hal/siot_mem_mngmt.h"
 
 #define SIOT_MESH_ANY_PACKET 0 // (used for other purposes) 	Samp-Unicast-Data-Packet
 #define SIOT_MESH_FROM_SANTA_DATA_PACKET 1 // 	Samp-From-Santa-Data-Packet
@@ -68,10 +69,16 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 // SIOT_MESH ret codes
 #define SIOT_MESH_RET_OK 0
 #define SIOT_MESH_RET_ERROR_ANY 1
-#define SIOT_MESH_RET_ERROR_NOT_FOUND 2
-#define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 3
+#define SIOT_MESH_RET_GARBAGE_RECEIVED 2
+#define SIOT_MESH_RET_PASS_TO_PROCESS 3
+#define SIOT_MESH_RET_PASS_TO_SEND 4
+// internal errors (TODO: should not be exposed)
+#define SIOT_MESH_RET_ERROR_NOT_FOUND 5
+#define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 6
 
 
+uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h );
+uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id );
 
 
 #endif // __SIOT_M_PROTOCOL_H__
