@@ -189,12 +189,110 @@ uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
 
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 {
-	parser_obj po_start, po_end;
+/*	parser_obj po_start, po_end;
 	zepto_parser_init( &po_start, mem_h );
 	zepto_parser_init( &po_end, mem_h );
 	zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
 	zepto_convert_part_of_request_to_response( mem_h, &po_start, &po_end );
-	return SIOT_MESH_RET_PASS_TO_PROCESS;
+	return SIOT_MESH_RET_PASS_TO_PROCESS;*/
+
+
+
+	parser_obj po, po1, po2;
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
+
+	uint16_t header = zepto_parse_encoded_uint16( &po );
+	// TODO: here and then use bit-field processing instead
+	if ( header & 1 ) // predefined packet types
+	{
+		uint8_t packet_type = ( header >> 1 ) & 0x7;
+		switch ( packet_type )
+		{
+			case SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET:
+			{
+				// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
+				bool extra_headers_present = ( header >> 4 ) & 0x1;
+				uint16_t TTL = header >> 5;
+				// now we're done with the header; proceeding to optional headers...
+				while ( extra_headers_present )
+				{
+					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'FROM-SANTA\' packet are not yet implemented" );
+					header = zepto_parse_encoded_uint16( &po );
+					extra_headers_present = header & 0x1;
+					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
+					switch ( generic_flags )
+					{
+						case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
+						case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
+						case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
+						case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
+						{
+							ZEPTO_DEBUG_ASSERT( NULL == "Error: not implemented\n" );
+							break;
+						}
+					}
+				}
+
+				// OPTIONAL-PAYLOAD-SIZE
+
+				// HEADER-CHECKSUM
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+				zepto_parser_init_by_parser( &po1, &po );
+
+
+				if ( actual_checksum != checksum )
+				{
+					// TODO: we have not received even a header
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
+				else
+				{
+					uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+					if ( remaining_size >= 2 )
+					{
+						parser_obj rq_start_po;
+						zepto_parser_init_by_parser( &po2, &po );
+						zepto_parser_init_by_parser( &rq_start_po, &po );
+						zepto_parse_skip_block( &po, remaining_size - 2 );
+						zepto_append_part_of_request_to_response( mem_h, &po2, &po );
+						actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
+						checksum = zepto_parse_uint8( &po );
+						checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+						if ( actual_checksum != checksum )
+						{
+							// TODO: we have only a partially received packet; prepare ACK
+							return SIOT_MESH_RET_PASS_TO_SEND;
+						}
+						else
+						{
+							// TODO: we're done
+							return SIOT_MESH_RET_PASS_TO_PROCESS;
+						}
+					}
+				}
+
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: we should not reach this point\n" );
+				break;
+			}
+			default:
+			{
+				ZEPTO_DEBUG_PRINTF_2( "Error: packet type %d received; not expected or not implemented\n", (header >> 1) & 0x7 );
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: processing of mesh packets of this type is not implemented\n" );
+				break;
+			}
+		}
+	}
+	else
+	{
+		ZEPTO_DEBUG_PRINTF_3( "Error: unexpected packet type %d,%d received\n", header& 1, (header >> 1) & 0xF );
+		ZEPTO_DEBUG_ASSERT( NULL == "Error: processing of mesh packets of ANY type is not implemented\n" );
+		return SIOT_MESH_RET_ERROR_ANY; // just as long as not implemented to make compiler happy
+	}
+	return SIOT_MESH_RET_OK;
 }
 
 #else // USED_AS_MASTER
@@ -331,13 +429,61 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 	return SIOT_MESH_RET_OK;
 }
 
+void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
+{
+	// Santa Packet structure: | SAMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+	// TODO: here and then use bit-field processing instead
+
+	parser_obj po, po1;
+
+	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
+	uint16_t header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 0 << 4 ); // '1', packet type, 0 (no extra headers), rezerved (zeros)
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+
+	// OPTIONAL-PAYLOAD-SIZE
+
+	// HEADER-CHECKSUM
+	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
+	uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, 0, rsp_sz, 0 );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+
+	// PAYLOAD
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+	zepto_append_part_of_request_to_response( mem_h, &po, &po1 );
+
+	// FULL-CHECKSUM
+	checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+}
+
 uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
 {
-	parser_obj po_start, po_end;
+/*	parser_obj po_start, po_end;
 	zepto_parser_init( &po_start, mem_h );
 	zepto_parser_init( &po_end, mem_h );
 	zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
 	zepto_convert_part_of_request_to_response( mem_h, &po_start, &po_end );
+	return SIOT_MESH_RET_OK;*/
+
+	// let's start implementing our response :)
+	uint8_t link_id;
+	uint8_t ret_code = siot_mesh_get_link_id( target_id, &link_id );
+	if ( ret_code == SIOT_MESH_RET_OK )
+	{
+		// prepare a message for sending according to link_id received
+		ZEPTO_DEBUG_ASSERT( NULL == "Error: not implemented\n" );
+		return SIOT_MESH_RET_OK;
+	}
+	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
+
+	// packet "from Santa" will be sent... let's form a packet
+	siot_mesh_form_packet_to_santa( mem_h, target_id );
+
+
 	return SIOT_MESH_RET_OK;
 }
 
