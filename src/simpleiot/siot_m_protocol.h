@@ -21,6 +21,8 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_common.h"
 #include "../simpleiot_hal/siot_mem_mngmt.h"
+#include <hal_time_provider.h>
+#include "../simpleiot_hal/hal_waiting.h"
 
 #define SIOT_MESH_ANY_PACKET 0 // (used for other purposes) 	Samp-Unicast-Data-Packet
 #define SIOT_MESH_FROM_SANTA_DATA_PACKET 1 // 	Samp-From-Santa-Data-Packet
@@ -77,7 +79,12 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 6
 
 
+#ifdef USED_AS_MASTER
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h );
+#else
+uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t signal_level, uint8_t error_cnt );
+uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h );
+#endif
 uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id );
 
 

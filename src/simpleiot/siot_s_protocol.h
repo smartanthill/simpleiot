@@ -24,12 +24,14 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "../simpleiot_hal/siot_mem_mngmt.h"
 
 // RET codes
-#define SASP_RET_IGNORE 0 // not authenticated, etc
-#define SASP_RET_TO_HIGHER_NEW 1 // new packet
-#define SASP_RET_TO_HIGHER_LAST_SEND_FAILED 3 // sending of last packet failed (for instance, old nonce)
-#define SASP_RET_TO_LOWER_REGULAR 4 // for regular sending
-#define SASP_RET_TO_LOWER_ERROR 5 // for error messaging
-#define SASP_RET_NONCE 6 // buffer out contains nonce
+#define SASP_RET_IGNORE_PACKET_BROKEN 0 // has not passed decryption/authentication
+#define SASP_RET_IGNORE_PACKET_LAST_REPEATED 1 // same nonce as last received
+#define SASP_RET_IGNORE_PACKET_OLD_NONCE_NA 2 // packet with a recommended minimal value of nonce to send; the value is less than current
+#define SASP_RET_TO_HIGHER_NEW 3 // new packet
+#define SASP_RET_TO_HIGHER_LAST_SEND_FAILED 4 // sending of last packet failed (for instance, old nonce)
+#define SASP_RET_TO_LOWER_REGULAR 5 // for regular sending
+#define SASP_RET_TO_LOWER_ERROR 6 // for error messaging
+#define SASP_RET_NONCE 7 // buffer out contains nonce
 
 
 // sizes
@@ -54,7 +56,7 @@ void sasp_restore_from_backup( /*SASP_DATA* sasp_data*/ );
 // handlers
 uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* packet_id, MEMORY_HANDLE mem_h/*, SASP_DATA* sasp_data*/ );
 uint8_t handler_sasp_send( const uint8_t* key, const uint8_t* packet_id, MEMORY_HANDLE mem_h/*, SASP_DATA* sasp_data*/ );
-uint8_t handler_sasp_get_packet_id( uint8_t* buffOut, int buffOutSize/*, SASP_DATA* sasp_data*/ );
+uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut/*, SASP_DATA* sasp_data*/ );
 void handler_sasp_save_state( /*SASP_DATA* sasp_data*/ );
 
 
