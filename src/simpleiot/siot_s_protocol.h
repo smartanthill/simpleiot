@@ -26,7 +26,7 @@ Copyright (C) 2015 OLogN Technologies AG
 // RET codes
 #define SASP_RET_IGNORE_PACKET_BROKEN 0 // has not passed decryption/authentication
 #define SASP_RET_IGNORE_PACKET_LAST_REPEATED 1 // same nonce as last received
-#define SASP_RET_IGNORE_PACKET_OLD_NONCE_NA 2 // packet with a recommended minimal value of nonce to send; the value is less than current
+#define SASP_RET_IGNORE_PACKET_NONCE_LS_NOT_APPLIED 2 // packet with a recommended minimal value of nonce to send; the value is less than current
 #define SASP_RET_TO_HIGHER_NEW 3 // new packet
 #define SASP_RET_TO_HIGHER_LAST_SEND_FAILED 4 // sending of last packet failed (for instance, old nonce)
 #define SASP_RET_TO_LOWER_REGULAR 5 // for regular sending

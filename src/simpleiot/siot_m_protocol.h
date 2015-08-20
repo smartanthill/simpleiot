@@ -24,6 +24,8 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <hal_time_provider.h>
 #include "../simpleiot_hal/hal_waiting.h"
 
+extern uint16_t DEVICE_SELF_ID;
+
 #define SIOT_MESH_ANY_PACKET 0 // (used for other purposes) 	Samp-Unicast-Data-Packet
 #define SIOT_MESH_FROM_SANTA_DATA_PACKET 1 // 	Samp-From-Santa-Data-Packet
 #define SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET 2 // 	Samp-To-Santa-Data-Packet
@@ -72,20 +74,23 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define SIOT_MESH_RET_OK 0
 #define SIOT_MESH_RET_ERROR_ANY 1
 #define SIOT_MESH_RET_GARBAGE_RECEIVED 2
-#define SIOT_MESH_RET_PASS_TO_PROCESS 3
-#define SIOT_MESH_RET_PASS_TO_SEND 4
+#define SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED 3
+#define SIOT_MESH_RET_PASS_TO_PROCESS 4
+#define SIOT_MESH_RET_PASS_TO_SEND 5
 // internal errors (TODO: should not be exposed)
-#define SIOT_MESH_RET_ERROR_NOT_FOUND 5
-#define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 6
+#define SIOT_MESH_RET_ERROR_NOT_FOUND 6
+#define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 7
 
 
 #ifdef USED_AS_MASTER
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h );
-#else
-uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t signal_level, uint8_t error_cnt );
-uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h );
-#endif
 uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id );
+#else
+uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt );
+uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h );
+uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val );
+uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t target_id );
+#endif
 
 
 #endif // __SIOT_M_PROTOCOL_H__

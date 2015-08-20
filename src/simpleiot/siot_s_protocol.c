@@ -372,7 +372,7 @@ uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE me
 			return SASP_RET_TO_HIGHER_LAST_SEND_FAILED;
 		}
 		ZEPTO_DEBUG_PRINTF_1( "handler_sasp_receive(), for SASP, error old nonce, not applied\n" );
-		return SASP_RET_IGNORE_PACKET_OLD_NONCE_NA;
+		return SASP_RET_IGNORE_PACKET_NONCE_LS_NOT_APPLIED;
 	}
 
 	// 3. Compare nonces...
