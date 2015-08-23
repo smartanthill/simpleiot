@@ -110,7 +110,7 @@ bool siot_mesh_clean_last_hop_data_storage_if_single_element( uint8_t slot_id )
 	return false;
 }
 
-void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers )
+void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers, uint16_t* request_id )
 {
 	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
 	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
@@ -120,6 +120,7 @@ if ( last_requests[slot_id].hop_list_sz == 0 )
 {
 	last_requests[slot_id].hop_list_sz = last_requests[slot_id].hop_list_sz;
 }
+	*request_id = last_requests[slot_id].rq_id;
 	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz > 0 ); // is it at all possible to have here 0 at time of calling? 
 	for ( i=0; i<last_requests[slot_id].hop_list_sz-1; i++)
 	{
@@ -267,7 +268,8 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
 	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // TODO: is it a self-ID? Then for Client it is 0, and some unique velue for other devices. SOURCE???
 
 	// REQUEST-ID
-	uint16_t rq_id = 0; // REQUEST-ID
+	static uint16_t rq_id = 0; // REQUEST-ID
+	rq_id++; // TODO: make true global; TODO: think whether this id is globally or per-device unique
 	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // REQUEST-ID
 
 	// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
@@ -326,15 +328,129 @@ uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
 	return SIOT_MESH_RET_OK;
 }
 
+uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t src_id, bool payload_present, uint16_t request_id )
+{
+	// here we already know that the packet is good enough
+	parser_obj po, po1, po2;
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
+
+	uint16_t header = zepto_parse_encoded_uint16( &po );
+	// TODO: here and then use bit-field processing instead
+	ZEPTO_DEBUG_ASSERT ( header & 1 ); // must already be checked
+	ZEPTO_DEBUG_ASSERT ( ( ( header >> 1 ) & 0x7 ) == SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET ); // must already be checked
+
+	SIOT_MESH_LAST_HOP_DATA last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX ];
+	uint8_t last_rq_hops_cnt = 0;
+
+	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
+	bool extra_headers_present = ( header >> 4 ) & 0x1;
+	uint16_t TTL = header >> 5;
+	// now we're done with the header; proceeding to optional headers...
+	while ( extra_headers_present )
+	{
+		header = zepto_parse_encoded_uint16( &po );
+		extra_headers_present = header & 0x1;
+		uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
+		switch ( generic_flags )
+		{
+			case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
+			{
+				last_hops[ last_rq_hops_cnt ].last_hop_id = header >> 4;
+				last_hops[ last_rq_hops_cnt ].conn_quality = zepto_parse_encoded_uint8( &po );
+				last_rq_hops_cnt++;
+				ZEPTO_DEBUG_ASSERT( last_rq_hops_cnt <= SIOT_MESH_LAST_HOP_DATA_MAX ); // TODO: here at ROOT we may allow longer lists (with a bit different implementation)
+				break;
+			}
+			case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
+			case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
+			case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
+			{
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+				break;
+			}
+			default:
+			{
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected type of optional header\n" );
+				break;
+			}
+		}
+	}
+
+	// SOURCE-ID
+#ifdef SA_DEBUG
+	ZEPTO_DEBUG_ASSERT( src_id == zepto_parse_encoded_uint16( &po ) ); // must coincide
+#else // SA_DEBUG
+	zepto_parse_encoded_uint16( &po ); // just skip
+#endif // SA_DEBUG
+
+	// REQUEST-ID
+#ifdef SA_DEBUG
+	ZEPTO_DEBUG_ASSERT( request_id == zepto_parse_encoded_uint16( &po ) ); // must coincide
+#else // SA_DEBUG
+	zepto_parse_encoded_uint16( &po ); // just skip
+#endif // SA_DEBUG
+
+	// OPTIONAL-PAYLOAD-SIZE
+
+	// HEADER-CHECKSUM
+#ifdef SA_DEBUG
+	uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
+	uint16_t checksum = zepto_parse_uint8( &po );
+	checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+	ZEPTO_DEBUG_ASSERT( actual_checksum == checksum );
+#else // SA_DEBUG
+	// just skip - everything must already be checked since we're here
+	zepto_parse_uint8( &po );
+	zepto_parse_uint8( &po );
+#endif // SA_DEBUG
+
+#ifdef SA_DEBUG
+	uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+	ZEPTO_DEBUG_ASSERT( remaining_size >= 2 ); // has already been checked by a caller
+	if ( payload_present )
+	{
+		parser_obj rq_start_po;
+		uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+		ZEPTO_DEBUG_ASSERT( remaining_size > 2 );
+		zepto_parser_init_by_parser( &po2, &po );
+		zepto_parser_init_by_parser( &rq_start_po, &po );
+		zepto_parse_skip_block( &po, remaining_size - 2 );
+		zepto_append_part_of_request_to_response( mem_h, &po2, &po );
+		actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
+		checksum = zepto_parse_uint8( &po );
+		checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+		ZEPTO_DEBUG_ASSERT( actual_checksum == checksum );
+		return SIOT_MESH_RET_OK;
+	}
+	else
+	{
+		uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+		ZEPTO_DEBUG_ASSERT( remaining_size == 2 );
+		actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po, 0, actual_checksum );
+		checksum = zepto_parse_uint8( &po );
+		checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+		ZEPTO_DEBUG_ASSERT( actual_checksum == checksum );
+		return SIOT_MESH_RET_OK;
+	}
+#else // SA_DEBUG
+	if ( payload_present )
+	{
+		uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+		zepto_parser_init_by_parser( &po1, &po );
+		zepto_parse_skip_block( &po, remaining_size - 2 );
+		zepto_convert_part_of_request_to_response( mem_h, &po2, &po );
+		return SIOT_MESH_RET_OK;
+	}
+#endif // SA_DEBUG
+}
+
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 {
-/*	parser_obj po_start, po_end;
-	zepto_parser_init( &po_start, mem_h );
-	zepto_parser_init( &po_end, mem_h );
-	zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
-	zepto_convert_part_of_request_to_response( mem_h, &po_start, &po_end );
-	return SIOT_MESH_RET_PASS_TO_PROCESS;*/
-
+	// When a packet just comes, it can be anything starting from total garbage through incomplete packet good for sending NAK only to a packet that is good for further processing.
+	// Complete processing may require a number of steps that are hard to revert, if performed, and a packet is not good enough for processing.
+	// Since that we first try to quickly figure out what kind of "joy" we have actually received, and then to perform full respective processing.
 
 
 	parser_obj po, po1, po2;
@@ -351,12 +467,9 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 		{
 			case SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET:
 			{
-				SIOT_MESH_LAST_HOP_DATA last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX ];
-				uint8_t last_rq_hops_cnt = 0;
-
 				// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
 				bool extra_headers_present = ( header >> 4 ) & 0x1;
-				uint16_t TTL = header >> 5;
+				// uint16_t TTL = header >> 5;
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
@@ -367,10 +480,7 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 					{
 						case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
 						{
-							last_hops[ last_rq_hops_cnt ].last_hop_id = header >> 4;
-							last_hops[ last_rq_hops_cnt ].conn_quality = zepto_parse_encoded_uint8( &po );
-							last_rq_hops_cnt++;
-							ZEPTO_DEBUG_ASSERT( last_rq_hops_cnt <= SIOT_MESH_LAST_HOP_DATA_MAX ); // TODO: here at ROOT we may allow longer lists (with a bit different implementation)
+							zepto_parse_encoded_uint8( &po ); // just skip
 							break;
 						}
 						case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
@@ -388,6 +498,12 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 					}
 				}
 
+				// SOURCE-ID
+				uint16_t src_id = zepto_parse_encoded_uint16( &po );
+
+				// REQUEST-ID
+				uint16_t request_id = zepto_parse_encoded_uint16( &po );
+
 				// OPTIONAL-PAYLOAD-SIZE
 
 				// HEADER-CHECKSUM
@@ -396,36 +512,36 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
 				zepto_parser_init_by_parser( &po1, &po );
 
-
-				if ( actual_checksum != checksum )
-				{
-					// TODO: we have not received even a header
+				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
-				}
-				else
+
+				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				if ( remaining_size >= 2 )
 				{
-					uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
-					if ( remaining_size >= 2 )
+					zepto_parser_init_by_parser( &po2, &po );
+					zepto_parse_skip_block( &po, remaining_size - 2 );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
+					checksum = zepto_parse_uint8( &po );
+					checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+					if ( actual_checksum != checksum )
 					{
-						parser_obj rq_start_po;
-						zepto_parser_init_by_parser( &po2, &po );
-						zepto_parser_init_by_parser( &rq_start_po, &po );
-						zepto_parse_skip_block( &po, remaining_size - 2 );
-						zepto_append_part_of_request_to_response( mem_h, &po2, &po );
-						actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
-						checksum = zepto_parse_uint8( &po );
-						checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-						if ( actual_checksum != checksum )
-						{
-							// TODO: we have only a partially received packet; prepare ACK
-							return SIOT_MESH_RET_PASS_TO_SEND;
-						}
-						else
-						{
-							// TODO: we're done
-							return SIOT_MESH_RET_PASS_TO_PROCESS;
-						}
+						// TODO: we have only a partially received packet; prepare NACK
+						ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+						return SIOT_MESH_RET_PASS_TO_SEND;
 					}
+					else
+					{
+						// TODO: we're done
+						siot_mesh_process_received_tosanta_packet( mem_h, src_id, remaining_size > 2, request_id );
+						// TODO: what are and what to do with ret values?
+						return SIOT_MESH_RET_PASS_TO_PROCESS;
+					}
+				}
+				else // packet is broken; subject for NAK
+				{
+					// TODO: we have only a partially received packet; prepare NACK
+					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
 
 				ZEPTO_DEBUG_ASSERT( NULL == "Error: we should not reach this point\n" );
@@ -635,7 +751,7 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 
 void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t target_id )
 {
-	// Santa Packet structure: | SAMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+	// Santa Packet structure: | SAMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
 
 	parser_obj po, po1;
@@ -643,19 +759,26 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uin
 
 	// !!! TODO: it might happen that this packet is not a reply to 'from Santa'; check, which data should be added this case
 
+	uint16_t request_id = 0;
 	if ( *mesh_val < 2 )
 	{
 		// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
 		header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 1 << 4 ); // '1', packet type, 1 (at least one extra header: hop list item), rezerved (zeros)
 		zepto_parser_encode_and_append_uint16( mem_h, header );
 		ZEPTO_DEBUG_ASSERT( *mesh_val < 2 );
-		siot_mesh_write_last_hop_data_as_opt_headers( *mesh_val, mem_h, true );
+		siot_mesh_write_last_hop_data_as_opt_headers( *mesh_val, mem_h, true, &request_id );
 	}
 	else
 	{
 		header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 0 << 4 ); // '1', packet type, 0 (noe extra headers), rezerved (zeros)
 		zepto_parser_encode_and_append_uint16( mem_h, header );
 	}
+
+	// SOURCE-ID
+	zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
+
+	// REQUEST-ID
+	zepto_parser_encode_and_append_uint16( mem_h, request_id );
 
 	// OPTIONAL-PAYLOAD-SIZE
 
