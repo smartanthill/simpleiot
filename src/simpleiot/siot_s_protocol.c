@@ -28,7 +28,7 @@ static 	SASP_DATA sasp_data;
 
 
 
-void sasp_init_at_lifestart( /*SASP_DATA* sasp_data*/ )
+void sasp_init_eeprom_data_at_lifestart( /*SASP_DATA* sasp_data*/ )
 {
 	sa_uint48_set_zero( sasp_data.nonce_lw );
 	sa_uint48_set_zero( sasp_data.nonce_ls );
@@ -40,8 +40,14 @@ void sasp_init_at_lifestart( /*SASP_DATA* sasp_data*/ )
 
 void sasp_restore_from_backup( /*SASP_DATA* sasp_data*/ )
 {
+	sasp_nonce_type future;
+
 	eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, sasp_data.nonce_lw );
 	eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, sasp_data.nonce_ls );
+
+	sa_uint48_init_by( future, sasp_data.nonce_ls );
+	sa_uint48_roundup_to_the_nearest_multiple_of_0x100( future ); // now 'future' has a value supposedly saved in eeprom
+	sa_uint48_increment( future );
 }
 
 void SASP_increment_nonce_last_sent( /*SASP_DATA* sasp_data*/ )

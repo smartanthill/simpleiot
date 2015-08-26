@@ -50,7 +50,7 @@ typedef struct _SASP_DATA
 
 
 // initializing and backup
-void sasp_init_at_lifestart( /*SASP_DATA* sasp_data*/ );
+void sasp_init_eeprom_data_at_lifestart( /*SASP_DATA* sasp_data*/ );
 void sasp_restore_from_backup( /*SASP_DATA* sasp_data*/ );
 
 // handlers

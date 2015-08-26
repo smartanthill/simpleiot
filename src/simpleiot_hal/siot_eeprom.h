@@ -31,8 +31,9 @@ Copyright (C) 2015 OLogN Technologies AG
 
 
 // calls
-void format_eeprom_at_lifestart();
 bool init_eeprom_access();
+//void format_eeprom_at_lifestart();
+bool eeprom_check_at_start();
 void eeprom_write( uint8_t id, uint8_t* data);
 void eeprom_read( uint8_t id, uint8_t* data);
 
