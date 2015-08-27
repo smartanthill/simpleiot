@@ -26,8 +26,16 @@ THIS FILE IS MANUALLY OR AUTOMATICALLY GENERATED BASED ON DESIRED PLUGIN LIST
 
 #include <simpleiot/siot_bodypart_list_common.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern const uint8_t SA_BODYPARTS_MAX ZEPTO_PROG_CONSTANT_LOCATION;
 extern const bodypart_item bodyparts[];
+
+#ifdef __cplusplus
+}
+#endif
 
 
 #endif // __SIOT_BODYPART_LIST_H__
