@@ -18,13 +18,17 @@ Copyright (C) 2015 OLogN Technologies AG
 
 /*******************************************************************************
   CONTENT OF THIS FILE IS INTENDED FOR DEBUG PURPOSES ONLY
-  and implements a highly simplified main loop.
+  and implements a highly simplified siot/sp.
   
-  In short, packet processing is reduced to sipmly echoing an incoming packet
-  back (using the same bus_id).
+  In short, packet processing is reduced to either not checking packet integrity
+  at all (VERY_DEBUG_SIOT_SP_NONE), or to checking only packet checksum
+  (VERY_DEBUG_SIOT_SP_CHECKSUM); in all cases packet authenticity is not checked.
+  Still, formally, implementation complies with its contract with "external world",
+  at least, in part of manipulating with packet id (nonce).
   
-  Main purpose is to make sure that packets have a chance to successfully pass
-  communication layer and to be delivered to higher level protocols
+  Main purpose is to quickly process a packet causing minimal influence on the
+  sysetm (in particular, no eeprom access is required, no heavy cryptography is
+  used, etc)
 *******************************************************************************/
 
 #if !defined VERY_DEBUG

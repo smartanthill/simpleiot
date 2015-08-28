@@ -14,6 +14,11 @@ Copyright (C) 2015 OLogN Technologies AG
     with this program; if not, write to the Free Software Foundation, Inc.,
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
+#define VERY_DEBUG
+#define VERY_DEBUG_SIOT_GDP
+#if (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_GDP)
+#include "siot_gd_protocol_dbg.inc"
+#else // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_GDP) )
 
 #include "siot_gd_protocol.h"
 
@@ -1439,3 +1444,4 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 	}
 }
 
+#endif // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_GDP) )
