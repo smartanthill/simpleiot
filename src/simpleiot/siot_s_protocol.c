@@ -15,6 +15,9 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
+#if (defined VERY_DEBUG) && ( (defined VERY_DEBUG_SIOT_SP_CHECKSUM) || (defined VERY_DEBUG_SIOT_SP_NONE) )
+#include "siot_s_protocol_dbg.inc"
+#else // (defined VERY_DEBUG) && ( (defined VERY_DEBUG_SIOT_SP_CHECKSUM) || (defined VERY_DEBUG_SIOT_SP_NONE) )
 
 #include "siot_s_protocol.h"
 #include "../simpleiot_hal/siot_mem_mngmt.h"
@@ -46,8 +49,9 @@ void sasp_restore_from_backup( /*SASP_DATA* sasp_data*/ )
 	eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, sasp_data.nonce_ls );
 
 	sa_uint48_init_by( future, sasp_data.nonce_ls );
-	sa_uint48_roundup_to_the_nearest_multiple_of_0x100( future ); // now 'future' has a value supposedly saved in eeprom
 	sa_uint48_increment( future );
+	sa_uint48_roundup_to_the_nearest_multiple_of_0x100( future ); // now 'future' has a value supposedly saved in eeprom
+	eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, future );
 }
 
 void SASP_increment_nonce_last_sent( /*SASP_DATA* sasp_data*/ )
@@ -153,7 +157,7 @@ void SASP_EncryptAndAddAuthenticationData( REQUEST_REPLY_HANDLE mem_h, const uin
 	zepto_parser_encode_and_prepend_uint( mem_h, packet_id, SASP_NONCE_SIZE );
 }
 
-bool SASP_IntraPacketAuthenticateAndDecrypt( const uint8_t* key, REQUEST_REPLY_HANDLE mem_h, const sa_uint48_t last_received_pid, sa_uint48_t received_pid )
+uint8_t SASP_IntraPacketAuthenticateAndDecrypt( const uint8_t* key, REQUEST_REPLY_HANDLE mem_h, const sa_uint48_t last_received_pid, sa_uint48_t received_pid )
 {
 	// input data structure: prefix (with nonce; not a part of EAX header) | encrypted data | tag
 	// Structure of output buffer: first_byte | byte_sequence
@@ -225,6 +229,7 @@ bool SASP_IntraPacketAuthenticateAndDecrypt( const uint8_t* key, REQUEST_REPLY_H
 
 bool SASP_is_for_sasp( REQUEST_REPLY_HANDLE mem_h )
 {
+	// TODO: optimize assuming that this call does not modify request/response
 	parser_obj po;
 	zepto_response_to_request( mem_h );
 	zepto_parser_init( &po, mem_h );
@@ -430,3 +435,6 @@ void handler_sasp_save_state( /*SASP_DATA* sasp_data*/ )
 	eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, sasp_data.nonce_lw );
 	eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, sasp_data.nonce_ls );
 }
+
+
+#endif // (defined VERY_DEBUG) && ( (defined VERY_DEBUG_SIOT_SP_CHECKSUM) || (defined VERY_DEBUG_SIOT_SP_NONE) )
