@@ -27,8 +27,8 @@ Copyright (C) 2015 OLogN Technologies AG
   assumed that packets come when the protocol is in a state that allows packet
   forwarding to an intended party.
   
-  Main purpose is, roughly, to exclude potential problems with the protocol
-  (or its specific implementation) from consideration.
+  Main purpose is, roughly, to avoid potential problems with the protocol
+  (or its specific implementation).
 *******************************************************************************/
 
 #if !defined VERY_DEBUG

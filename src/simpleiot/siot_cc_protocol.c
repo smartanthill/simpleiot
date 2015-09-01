@@ -15,6 +15,10 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
+#if (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_CCP)
+#include "siot_cc_protocol_dbg.inc"
+#else // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_CCP) )
+
 
 #include "siot_cc_protocol.h"
 #include "siot_gd_protocol.h" // for packet status in chain
@@ -525,3 +529,5 @@ uint8_t handler_sacpp_reply( MEMORY_HANDLE mem_h )
 {
 }
 */
+
+#endif // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_CCP) )
