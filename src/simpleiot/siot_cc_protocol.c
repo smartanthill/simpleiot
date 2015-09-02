@@ -410,6 +410,8 @@ uint8_t handler_saccp_timer( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa_t
 	}
 }
 
+extern uint8_t handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
+
 uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa_time_val* currt, waiting_for* wf )
 {
 	uint8_t ret_code;
@@ -513,6 +515,19 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa
 		case SACCP_REUSE_OLD_PROGRAM:
 		{
 			ZEPTO_DEBUG_ASSERT( NULL == "Error: not implemented\n" );
+			break;
+		}
+		case SACCP_PHY_AND_ROUTING_DATA:
+		{
+			// TODO: clarify processing of "additional bits"
+			uint8_t additional_bits = (packet_head_byte >> 3) & 0x7; // "additional bits" passed alongside with PHY-AND-ROUTING-DATA-REQUEST-BODY
+			ZEPTO_DEBUG_ASSERT( additional_bits == 0 ); // Route-Update-Request is always accompanied with SACCP "additional bits" equal to 0x0; bits [6..7] reserved (MUST be zeros)
+			handler_siot_process_route_update_request( &po, mem_h );
+			uint16_t ret_head = SACCP_PHY_AND_ROUTING_DATA; // additional bits are 0
+			zepto_parser_encode_and_prepend_uint16( mem_h, ret_head );
+			uint8_t first_byte_back = SAGDP_P_STATUS_TERMINATING; // TODO: this is nowhere specified. Make sure this approach is OK
+			zepto_write_prepend_byte( mem_h, first_byte_back );
+			return SACCP_RET_PASS_LOWER;
 			break;
 		}
 		default:

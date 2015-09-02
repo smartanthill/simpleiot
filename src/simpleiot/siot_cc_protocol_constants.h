@@ -19,16 +19,19 @@ Copyright (C) 2015 OLogN Technologies AG
 #if !defined __SACCP_PROTOCOL_CONSTANTS_H__
 #define __SACCP_PROTOCOL_CONSTANTS_H__
 
+// TODO: put constants below in correspondence with a present state of documentation
 
 // packet types
-#define SACCP_PAIRING 0x0            /*Master: sends; Slave: receives*/
-#define SACCP_PROGRAMMING 0x1        /*Master: sends; Slave: receives*/
-#define SACCP_NEW_PROGRAM 0x2        /*Master: sends; Slave: receives*/
-#define SACCP_REPEAT_OLD_PROGRAM 0x3 /*Master: sends; Slave: receives*/
-#define SACCP_REUSE_OLD_PROGRAM 0x4  /*Master: sends; Slave: receives*/
+#define SACCP_PAIRING 0x0              /*Master: sends; Slave: receives*/
+#define SACCP_PROGRAMMING 0x1          /*Master: sends; Slave: receives*/
+#define SACCP_NEW_PROGRAM 0x2          /*Master: sends; Slave: receives*/
+#define SACCP_REPEAT_OLD_PROGRAM 0x3   /*Master: sends; Slave: receives*/
+#define SACCP_REUSE_OLD_PROGRAM 0x4    /*Master: sends; Slave: receives*/
+#define SACCP_PHY_AND_ROUTING_DATA 0x5 /*Master: sends; Slave: receives*/
 
 #define SACCP_PAIRING_RESPONSE 0x7     /*Master: receives; Slave: sends*/
 #define SACCP_PROGRAMMING_RESPONSE 0x6 /*Master: receives; Slave: sends*/
+#define SACCP_PHY_AND_ROUTING_DATA 0x5 /*Master: receives; Slave: sends*/
 #define SACCP_REPLY_OK 0x0             /*Master: receives; Slave: sends*/
 #define SACCP_REPLY_EXCEPTION 0x1      /*Master: receives; Slave: sends*/
 #define SACCP_REPLY_ERROR 0x2          /*Master: receives; Slave: sends*/

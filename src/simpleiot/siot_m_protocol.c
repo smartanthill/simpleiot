@@ -116,10 +116,6 @@ void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDL
 	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
 	uint8_t i;
 	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz <= SIOT_MESH_LAST_HOP_DATA_MAX );
-if ( last_requests[slot_id].hop_list_sz == 0 )
-{
-	last_requests[slot_id].hop_list_sz = last_requests[slot_id].hop_list_sz;
-}
 	*request_id = last_requests[slot_id].rq_id;
 	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz > 0 ); // is it at all possible to have here 0 at time of calling? 
 	for ( i=0; i<last_requests[slot_id].hop_list_sz-1; i++)
@@ -138,15 +134,22 @@ if ( last_requests[slot_id].hop_list_sz == 0 )
 #endif // !defined USED_AS_MASTER
 
 
+////////////////////////////  ROUTE and LINK table processing   //////////////////////////////////
+
 void siot_mesh_init_at_life_start()
 {
 	siot_mesh_link_table_size = 0;
 	siot_mesh_route_table_size = 0;
 }
 
-uint8_t siot_mesh_get_link_id( uint8_t target_id, uint8_t* link_id )
+void siot_mesh_clear_rout_table()
 {
-	uint8_t i;
+	siot_mesh_route_table_size = 0;
+}
+
+uint8_t siot_mesh_target_to_link_id( uint16_t target_id, uint16_t* link_id )
+{
+	uint16_t i;
 	for ( i=0; i<siot_mesh_route_table_size; i++ )
 		if ( siot_mesh_route_table[i].TARGET_ID == target_id )
 		{
@@ -156,9 +159,47 @@ uint8_t siot_mesh_get_link_id( uint8_t target_id, uint8_t* link_id )
 	return SIOT_MESH_RET_ERROR_NOT_FOUND;
 }
 
-uint8_t siot_mesh_delete_link_id( uint8_t target_id )
+uint8_t siot_mesh_add_link( SIOT_MESH_LINK* link )
 {
-	uint8_t i;
+	uint16_t i;
+	uint16_t link_id = link->LINK_ID;
+	for ( i=0; i<siot_mesh_link_table_size; i++ )
+	{
+		if ( siot_mesh_link_table[i].LINK_ID < link_id )
+			continue;
+		if ( siot_mesh_link_table[i].LINK_ID == link_id ) // found
+		{
+			ZEPTO_MEMCPY( siot_mesh_link_table + i, link, sizeof(SIOT_MESH_LINK) );
+			return SIOT_MESH_RET_OK;
+		}
+		break;
+	}
+	// as we are here, the entry does not exist at all, and we have to add it rather than modify existing
+	if ( siot_mesh_link_table_size == SIOT_MESH_LINK_TABLE_SIZE_MAX )
+		return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
+
+	ZEPTO_MEMMOV( siot_mesh_link_table + i + 1, siot_mesh_link_table + i, sizeof(SIOT_MESH_LINK) * ( siot_mesh_link_table_size - i ) );
+	ZEPTO_MEMCPY( siot_mesh_link_table + i, link, sizeof(SIOT_MESH_LINK) );
+	siot_mesh_link_table_size++;
+	return SIOT_MESH_RET_OK;
+}
+
+uint8_t siot_mesh_remove_link( uint16_t link_id )
+{
+	uint16_t i;
+	for ( i=0; i<siot_mesh_link_table_size; i++ )
+		if ( siot_mesh_link_table[i].LINK_ID == link_id )
+		{
+			ZEPTO_MEMMOV( siot_mesh_link_table + i, siot_mesh_link_table + i + 1, sizeof(SIOT_MESH_ROUTE) * ( siot_mesh_link_table_size - i - 1 ) );
+			siot_mesh_link_table_size--;
+			return SIOT_MESH_RET_OK;
+		}
+	return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
+uint8_t siot_mesh_delete_route( uint16_t target_id )
+{
+	uint16_t i;
 	for ( i=0; i<siot_mesh_route_table_size; i++ )
 		if ( siot_mesh_route_table[i].TARGET_ID == target_id )
 		{
@@ -169,9 +210,9 @@ uint8_t siot_mesh_delete_link_id( uint8_t target_id )
 	return SIOT_MESH_RET_ERROR_NOT_FOUND;
 }
 
-uint8_t siot_mesh_add_link_id( uint8_t target_id, uint8_t link_id )
+uint8_t siot_mesh_add_route( uint16_t target_id, uint16_t link_id )
 {
-	uint8_t i;
+	uint16_t i;
 	for ( i=0; i<siot_mesh_route_table_size; i++ )
 	{
 		if ( siot_mesh_route_table[i].TARGET_ID < target_id )
@@ -192,9 +233,14 @@ uint8_t siot_mesh_add_link_id( uint8_t target_id, uint8_t link_id )
 	siot_mesh_route_table[i].LINK_ID = link_id;
 	siot_mesh_route_table_size++;
 	return SIOT_MESH_RET_OK;
-
-	return SIOT_MESH_RET_ERROR_NOT_FOUND;
 }
+
+uint16_t siot_mesh_calculate_route_table_checksum()
+{
+	return 0;
+}
+
+// service functions
 
 uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t sz, uint16_t accum_val )
 {
@@ -311,8 +357,8 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
 
 uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
 {
-	uint8_t link_id;
-	uint8_t ret_code = siot_mesh_get_link_id( target_id, &link_id );
+	uint16_t link_id;
+	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
 	{
 		// prepare a message for sending according to link_id received
@@ -810,8 +856,8 @@ uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, u
 	return SIOT_MESH_RET_OK;*/
 
 	// let's start implementing our response :)
-	uint8_t link_id;
-	uint8_t ret_code = siot_mesh_get_link_id( target_id, &link_id );
+	uint16_t link_id;
+	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
 	{
 		// prepare a message for sending according to link_id received
@@ -834,6 +880,127 @@ uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8
 	if ( siot_mesh_clean_last_hop_data_storage_if_single_element( *mesh_val ) )
 		*mesh_val = 0xFF;
 	return SIOT_MESH_RET_OK;
+}
+
+void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply )
+{
+	uint8_t ret_code;
+	uint16_t flags = zepto_parse_encoded_uint16( po );
+	// TODO: use bit field processing where applicable
+	bool discard_rt = flags & 1;
+	// TODO: address other flags: bit[1] being UPDATE-MAX-TTL flag, bit[2] being UPDATE-FORWARD-TO-SANTA-DELAY flag, bit[3] being UPDATE-MAX-NODE-RANDOM-DELAY flag, and bits[4..] reserved (MUST be zeros)
+	//       by now we assume that none are set until implemented
+	ZEPTO_DEBUG_ASSERT( (flags >> 1) == 0 ); // until implemented
+
+	// TODO: we also assume that there is no optional header
+	// TODO: check spec regarding optional headers
+
+	// OPTIONAL-ORIGINAL-RT-CHECKSUM and discarding table
+	if ( discard_rt ) // bit[0] being DISCARD-RT-FIRST (indicating that before processing MODIFICATIONS-LIST, the whole Routing Table must be discarded)
+		siot_mesh_clear_rout_table();
+	else
+	{
+		uint16_t checksum_before_calc = siot_mesh_calculate_route_table_checksum();
+		uint16_t checksum_before_read = zepto_parse_uint8( po );
+		checksum_before_read |= ((uint16_t)zepto_parse_uint8( po )) << 8;
+		if ( checksum_before_read != checksum_before_calc )
+		{
+			ZEPTO_DEBUG_ASSERT( 0 == "Reporting Bad route table checksum is not yet implemented" );
+			return;
+		}
+	}
+
+	// | OPTIONAL-MAX-TTL | OPTIONAL-FORWARD-TO-SANTA-DELAY-UNIT | OPTIONAL-FORWARD-TO-SANTA-DELAY | OPTIONAL-MAX-FORWARD-TO-SANTA-DELAY | OPTIONAL-MAX-NODE-RANDOM-DELAY-UNIT | OPTIONAL-MAX-NODE-RANDOM-DELAY | 
+
+	// MODIFICATIONS-LIST
+	uint16_t entry_header;
+	do
+	{
+		entry_header = zepto_parse_encoded_uint16( po );
+		uint8_t type = (entry_header>>1) & 3; // bits[1..2] equal to a 2-bit constant...
+		switch ( type )
+		{
+			case ADD_OR_MODIFY_LINK_ENTRY:
+			{
+				SIOT_MESH_LINK link;
+				// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
+				bool link_delay_present = ( entry_header >> 3 ) & 1;// bit[3] being LINK-DELAY-PRESENT flag
+				link.LINK_ID = entry_header >> 4; // bits[4..] equal to LINK-ID
+				link.BUS_ID = zepto_parse_encoded_uint16( po );
+				// NEXT-HOP-ACKS-AND-INTRA-BUS-ID: Encoded-Unsigned-Int<max=4> bitfield substrate 
+				uint32_t ibid_pl_1 = zepto_parse_encoded_uint32( po );
+				link.NEXT_HOP_ACKS = ibid_pl_1 & 1; // bit[0] being a NEXT-HOP-ACKS flag for the Routing Table Entry
+				link.INTRA_BUS_ID = ibid_pl_1 >> 1; // bits[1..] representing INTRA-BUS-ID-PLUS-1
+				if ( link.INTRA_BUS_ID == 0 ) // means that INTRA-BUS-ID==NULL, and therefore that the link entry is an incoming link entry
+				{
+					ZEPTO_DEBUG_ASSERT( 0 == "INTRA-BUS-ID==NULL is not yet implemented" );
+					return;
+				}
+				else
+					(link.INTRA_BUS_ID)--; // TODO: distinguishing NULL and 0
+				if ( link_delay_present )
+				{
+					link.LINK_DELAY_UNIT = zepto_parse_encoded_uint16( po );
+					link.LINK_DELAY = zepto_parse_encoded_uint16( po );
+					link.LINK_DELAY_ERROR = zepto_parse_encoded_uint16( po );
+				}
+				else
+				{
+					// TODO: how to mark that such values were not specified???
+				}
+				ret_code = siot_mesh_add_link( &link );
+				if ( ret_code != SIOT_MESH_RET_OK )
+				{
+					ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_OUT_OF_RANGE );
+					ZEPTO_DEBUG_ASSERT( 0 == "Link list Out-of-range error reporting is not yet implemented" );
+				}
+				break;
+			}
+			case DELETE_LINK_ENTRY:
+			{
+				uint16_t link_id = entry_header >> 3; // bits[3..] equal to LINK-ID
+				ret_code = siot_mesh_remove_link( link_id );
+				if ( ret_code != SIOT_MESH_RET_OK )
+				{
+					ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
+					ZEPTO_DEBUG_ASSERT( 0 == "Link to be removed is not found; error reporting is not yet implemented" ); // NOTE: it looks like, if we have already checked a checksum, this is not (statistically) possible
+				}
+				break;
+			}
+			case ADD_OR_MODIFY_ROUTE_ENTRY:
+			{
+				// | ADD-OR-MODIFY-ROUTE-ENTRY-AND-LINK-ID | TARGET-ID |
+				uint16_t link_id = entry_header >> 3; // bits[3..] equal to LINK-ID
+				uint16_t target_id = zepto_parse_encoded_uint16( po );
+				ret_code = siot_mesh_add_route( target_id, link_id );
+				if ( ret_code != SIOT_MESH_RET_OK )
+				{
+					ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_OUT_OF_RANGE );
+					ZEPTO_DEBUG_ASSERT( 0 == "Route list Out-of-range error reporting is not yet implemented" );
+				}
+				break;
+			}
+			case DELETE_ROUTE_ENTRY:
+			{
+				uint16_t target_id = entry_header >> 3; // bits[3..] equal to TARGET-ID
+				break;
+			}
+		}
+	}
+	while ( entry_header & 1 ); // bit[0] marks the end of MODIFICATIONS-LIST
+
+	// RESULTING-RT-CHECKSUM
+	uint16_t checksum_before_calc = siot_mesh_calculate_route_table_checksum();
+	uint16_t checksum_before_read = zepto_parse_uint8( po );
+	checksum_before_read |= ((uint16_t)zepto_parse_uint8( po )) << 8;
+	if ( checksum_before_read != checksum_before_calc )
+	{
+		ZEPTO_DEBUG_ASSERT( 0 == "Reporting Bad route table checksum is not yet implemented" );
+		return;
+	}
+
+	// if we're here, everything is fine, and we report no error
+	zepto_parser_encode_and_append_uint8( reply, 0 ); // no error
 }
 
 #endif // USED_AS_MASTER

@@ -38,25 +38,31 @@ extern uint16_t DEVICE_SELF_ID;
 #define SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK 2
 #define SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP 3
 
+// Route table MODIFICATIONS-LIST entry types
+#define ADD_OR_MODIFY_LINK_ENTRY 0
+#define DELETE_LINK_ENTRY 1
+#define ADD_OR_MODIFY_ROUTE_ENTRY 2
+#define DELETE_ROUTE_ENTRY 3
+
 // SIOT_MESH data structures
 
 // link table item
 typedef struct _SIOT_MESH_LINK
 {
-	uint8_t LINK_ID;
-	uint8_t BUS_ID;
+	uint16_t LINK_ID;// type is inspired in section "Communicating Routing Table Information over SACCP" by "Encoded-Unsigned-Int<max=2> bitfield substrate ... bits[4..] equal to LINK-ID"
+	uint16_t BUS_ID; // type is inspired in section "Communicating Routing Table Information over SACCP" by "BUS-ID is an Encoded-Unsigned-Int<max=2> field"
 	uint8_t INTRA_BUS_ID; // INTRA-BUS-ID=NULL means that the entry is for an incoming link. Incoming link entries are relatiely rare, and are used to specify LINK-DELAYs.
 	uint8_t NEXT_HOP_ACKS; // NEXT-HOP-ACKS is a flag which is set if the nearest hop (over (BUS-ID,INTRA-BUS-ID)) is known to be able not only to receive packets, but to send ACKs back
-	uint8_t LINK_DELAY_UNIT;
-	uint8_t LINK_DELAY;
-	uint8_t LINK_DELAY_ERROR;
+	uint16_t LINK_DELAY_UNIT; // type is inspired: same section as above
+	uint16_t LINK_DELAY; // type is inspired: same section as above
+	uint16_t LINK_DELAY_ERROR; // type is inspired: same section as above
 } SIOT_MESH_LINK;
 
 // rout table item
 typedef struct _SIOT_MESH_ROUTE
 {
-	uint8_t TARGET_ID;
-	uint8_t LINK_ID;
+	uint16_t TARGET_ID;
+	uint16_t LINK_ID;
 } SIOT_MESH_ROUTE;
 
 typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
@@ -91,6 +97,8 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val );
 uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t target_id );
 #endif
+
+void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
 
 
 #endif // __SIOT_M_PROTOCOL_H__
