@@ -49,7 +49,8 @@ extern uint16_t DEVICE_SELF_ID;
 // link table item
 typedef struct _SIOT_MESH_LINK
 {
-	uint16_t LINK_ID;// type is inspired in section "Communicating Routing Table Information over SACCP" by "Encoded-Unsigned-Int<max=2> bitfield substrate ... bits[4..] equal to LINK-ID"
+	uint16_t LINK_ID; // type is inspired in section "Communicating Routing Table Information over SACCP" by "Encoded-Unsigned-Int<max=2> bitfield substrate ... bits[4..] equal to LINK-ID"
+	uint16_t NEXT_HOP; // note: this link will be common for all targets that are reachable through a device with NEXT_HOP device ID
 	uint16_t BUS_ID; // type is inspired in section "Communicating Routing Table Information over SACCP" by "BUS-ID is an Encoded-Unsigned-Int<max=2> field"
 	uint8_t INTRA_BUS_ID; // INTRA-BUS-ID=NULL means that the entry is for an incoming link. Incoming link entries are relatiely rare, and are used to specify LINK-DELAYs.
 	uint8_t NEXT_HOP_ACKS; // NEXT-HOP-ACKS is a flag which is set if the nearest hop (over (BUS-ID,INTRA-BUS-ID)) is known to be able not only to receive packets, but to send ACKs back

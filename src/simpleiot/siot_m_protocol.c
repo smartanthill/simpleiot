@@ -19,6 +19,37 @@ Copyright (C) 2015 OLogN Technologies AG
 
 //DECLARE_DEVICE_ID
 
+typedef struct _SIOT_MESH_LAST_HOP_DATA
+{
+	uint16_t last_hop_id;
+	uint8_t conn_quality;
+} SIOT_MESH_LAST_HOP_DATA;
+
+#ifdef USED_AS_MASTER
+
+// NOTE: On a ROOT (MASTER) side any implementation is inevitably quite complicated as
+// (1) ROOT has to operate with many devices, and
+// (2) ROOT implements almost all "decision-making" logic.
+// On the other hand, ROOT is expected to run on a reasonably powerfull platforms.
+// This results in that implementation at ROOT may not necessarily satisfy limitations of that for DEVICEs.
+// To avoid confusions we put all necessary processing in a separate file
+// which should NOT be taken as a code sample for embadded programming.
+
+// We will declare all necessary interface calls below.
+#define SIOT_MESH_LAST_HOP_DATA_MAX 4
+
+uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t sz, uint16_t accum_val )
+{
+	return 0;
+}
+extern uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
+uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val )
+{
+	return 0;
+}
+
+#else
+
 #define SIOT_MESH_LINK_TABLE_SIZE_MAX 256
 #define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 256
 
@@ -28,15 +59,7 @@ uint8_t siot_mesh_route_table_size;
 static SIOT_MESH_ROUTE siot_mesh_route_table[ SIOT_MESH_ROUTE_TABLE_SIZE_MAX ];
 static SIOT_MESH_RETRANSM_COMMON_DATA siot_mesh_retransm_common_data;
 
-typedef struct _SIOT_MESH_LAST_HOP_DATA
-{
-	uint16_t last_hop_id;
-	uint8_t conn_quality;
-} SIOT_MESH_LAST_HOP_DATA;
-
 #define SIOT_MESH_LAST_HOP_DATA_MAX 4
-
-#if !defined USED_AS_MASTER
 
 static SIOT_MESH_LAST_HOP_DATA _last_hops_0[ SIOT_MESH_LAST_HOP_DATA_MAX ];
 static SIOT_MESH_LAST_HOP_DATA _last_hops_1[ SIOT_MESH_LAST_HOP_DATA_MAX ];
@@ -130,11 +153,6 @@ void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDL
 	zepto_parser_encode_and_append_uint16( mem_h, header );
 	zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
 }
-
-#endif // !defined USED_AS_MASTER
-
-
-////////////////////////////  ROUTE and LINK table processing   //////////////////////////////////
 
 void siot_mesh_init_at_life_start()
 {
@@ -266,6 +284,11 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 	return accum_val;
 }
 
+#endif // !defined USED_AS_MASTER
+
+
+////////////////////////////  ROUTE and LINK table processing   //////////////////////////////////
+
 #ifdef USED_AS_MASTER
 
 #define SIOT_MESH_IS_QUALITY_OF_INCOMING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
@@ -358,7 +381,7 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
 uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
 {
 	uint16_t link_id;
-	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
+	uint8_t ret_code = siot_mesh_at_root_target_to_link_id( target_id, &link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
 	{
 		// prepare a message for sending according to link_id received
