@@ -510,8 +510,8 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 		zepto_parser_init_by_parser( &po1, &po );
 		zepto_parse_skip_block( &po, remaining_size - 2 );
 		zepto_convert_part_of_request_to_response( mem_h, &po2, &po );
-		return SIOT_MESH_RET_OK;
 	}
+	return SIOT_MESH_RET_OK;
 #endif // SA_DEBUG
 }
 
