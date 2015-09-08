@@ -22,6 +22,7 @@ Copyright (C) 2015 OLogN Technologies AG
 typedef struct _SIOT_MESH_LAST_HOP_DATA
 {
 	uint16_t last_hop_id;
+	uint16_t last_hop_bus_id;
 	uint8_t conn_quality;
 } SIOT_MESH_LAST_HOP_DATA;
 
@@ -42,22 +43,33 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_
 {
 	return 0;
 }
-extern uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
+
 uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val )
 {
 	return 0;
 }
 
-#else
+#else // USED_AS_MASTER
 
+#ifdef SA_RETRANSMITTER
 #define SIOT_MESH_LINK_TABLE_SIZE_MAX 256
 #define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 256
+#else
+#define SIOT_MESH_LINK_TABLE_SIZE_MAX 1
+#define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 1
+#endif
 
 uint8_t siot_mesh_link_table_size;
 static SIOT_MESH_LINK siot_mesh_link_table[ SIOT_MESH_LINK_TABLE_SIZE_MAX ];
 uint8_t siot_mesh_route_table_size;
 static SIOT_MESH_ROUTE siot_mesh_route_table[ SIOT_MESH_ROUTE_TABLE_SIZE_MAX ];
 static SIOT_MESH_RETRANSM_COMMON_DATA siot_mesh_retransm_common_data;
+
+void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
+{
+	siot_mesh_route_table_size = 0;
+	siot_mesh_link_table_size = 0;
+}
 
 #define SIOT_MESH_LAST_HOP_DATA_MAX 4
 
@@ -83,7 +95,7 @@ static SIOT_MESH_LAST_REQUEST last_requests[2] =
 
 #define SIOT_MESH_QUALITY_OF_FIRST_IS_BETTER( a, b ) (a) < (b)
 
-void siot_mesh_add_last_hop_data( uint8_t slot_id, uint16_t last_hop_id, uint8_t conn_q )
+void siot_mesh_add_last_hop_data( uint8_t slot_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
 {
 	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
 	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
@@ -91,6 +103,7 @@ void siot_mesh_add_last_hop_data( uint8_t slot_id, uint16_t last_hop_id, uint8_t
 	if ( last_requests[slot_id].hop_list_sz < SIOT_MESH_LAST_HOP_DATA_MAX )
 	{
 		last_hops[last_requests[slot_id].hop_list_sz].last_hop_id = last_hop_id;
+		last_hops[last_requests[slot_id].hop_list_sz].last_hop_bus_id = last_hop_bus_id;
 		last_hops[last_requests[slot_id].hop_list_sz].conn_quality = conn_q;
 		(last_requests[slot_id].hop_list_sz)++;
 	}
@@ -106,18 +119,19 @@ void siot_mesh_add_last_hop_data( uint8_t slot_id, uint16_t last_hop_id, uint8_t
 		{
 			ZEPTO_MEMMOV( last_hops + worst, last_hops + worst + 1, ( SIOT_MESH_LAST_HOP_DATA_MAX - worst - 1 ) * sizeof( SIOT_MESH_LAST_HOP_DATA ) );
 			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].last_hop_id = last_hop_id;
+			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].last_hop_bus_id = last_hop_bus_id;
 			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].conn_quality = conn_q;
 		}
 	}
 }
 
-void siot_mesh_init_last_hop_data_storage( uint8_t slot_id, uint16_t request_id, uint16_t last_hop_id, uint8_t conn_q )
+void siot_mesh_init_last_hop_data_storage( uint8_t slot_id, uint16_t request_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
 {
 	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
 	last_requests[slot_id].hop_list_sz = 0;
 	last_requests[slot_id].ineffect = true;
 	last_requests[slot_id].rq_id = request_id;
-	siot_mesh_add_last_hop_data( slot_id, last_hop_id, conn_q );
+	siot_mesh_add_last_hop_data( slot_id, last_hop_id, last_hop_bus_id, conn_q );
 }
 
 bool siot_mesh_clean_last_hop_data_storage_if_single_element( uint8_t slot_id )
@@ -146,11 +160,13 @@ void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDL
 		// TODO: use bit-field processing where applicable
 		uint16_t header = 1 | ( SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP << 1 ) | ( last_hops[ i ].last_hop_id << 4 );
 		zepto_parser_encode_and_append_uint16( mem_h, header );
+		zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
 		zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
 	}
 	ZEPTO_DEBUG_ASSERT( i == last_requests[slot_id].hop_list_sz - 1 ); 
 	uint16_t header = ( no_more_headers ? 0: 1 ) | ( SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP << 1 ) | ( last_hops[ i ].last_hop_id << 4 );
 	zepto_parser_encode_and_append_uint16( mem_h, header );
+	zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
 	zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
 }
 
@@ -291,38 +307,7 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 
 #ifdef USED_AS_MASTER
 
-#define SIOT_MESH_IS_QUALITY_OF_INCOMING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
-#define SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( x ) ( (x) < 0x7F )
-#define SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( in1, out1, in2, out2 ) ( (in1<in2)||((in1==in2)&&(out1<out2)) ) /*TODO: this is a quick solution; think about better ones*/
-
-bool siot_mesh_find_best_route( const SIOT_MESH_LAST_HOP_DATA* hops_in, uint16_t hops_in_sz, const SIOT_MESH_LAST_HOP_DATA* hops_out, uint16_t hops_out_sz, uint16_t* id_from, uint16_t* id_to )
-{
-	uint16_t i, j;
-	uint16_t last_in, last_out;
-	uint16_t match_cnt = 0;
-	if ( hops_in_sz == 0 || hops_out_sz == 0 )
-		return false;
-
-	// 1. find matches (within c transmissions of admissible_quality
-	for ( i=0; i<hops_in_sz; i++ )
-		if ( SIOT_MESH_IS_QUALITY_OF_INCOMING_CONNECTION_ADMISSIBLE( (hops_in + i)->conn_quality ) )
-			for ( j=0; j<hops_out_sz; j++ )
-				if ( ( hops_in[i].last_hop_id == hops_out[i].last_hop_id ) && SIOT_MESH_IS_QUALITY_OF_OUTGOING_CONNECTION_ADMISSIBLE( (hops_out + i)->conn_quality ) )
-					if ( match_cnt == 0 || SIOT_MESH_IS_QUALITY_OF_FIRST_INOUT_CONNECTION_BETTER( hops_in[i].conn_quality, hops_out[j].conn_quality, hops_in[last_in].conn_quality, hops_out[last_out].conn_quality ) )
-					{
-						last_in = i;
-						last_out = j;
-						*id_from = hops_in[i].last_hop_id;
-						*id_to = hops_out[i].last_hop_id;
-						match_cnt++;
-					}
-	if ( match_cnt != 0 )
-		return true;
-
-	return false;
-}
-
-void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
+void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t bus_id_used )
 {
 	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
@@ -335,6 +320,9 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
 
 	// LAST-HOP
 	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // TODO: is it a self-ID? Then for Client it is 0, and some unique velue for other devices. SOURCE???
+
+	// LAST-HOP-BUS-ID
+	zepto_parser_encode_and_append_uint16( mem_h, bus_id_used ); // TODO: is it a self-ID? Then for Client it is 0, and some unique velue for other devices. SOURCE???
 
 	// REQUEST-ID
 	static uint16_t rq_id = 0; // REQUEST-ID
@@ -378,26 +366,39 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint8_t target_id )
 	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 }
 
-uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id )
+uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t* link_id )
 {
-	uint16_t link_id;
-	uint8_t ret_code = siot_mesh_at_root_target_to_link_id( target_id, &link_id );
+	uint8_t ret_code = siot_mesh_at_root_target_to_link_id( target_id, link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
 	{
 		// prepare a message for sending according to link_id received
-		ZEPTO_DEBUG_ASSERT( NULL == "Error: not implemented\n" );
+		// TODO: what should we do, if the root in the route table, but incoming packet was "from Santa"?
+
+		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
+		// we assume that in such "underdeveloped" packets the whole header is 0
+
+		zepto_parser_encode_and_append_uint16( mem_h, 0 ); // header
+		parser_obj po_start, po_end;
+		zepto_parser_init( &po_start, mem_h );
+		zepto_parser_init( &po_end, mem_h );
+		zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+		zepto_append_part_of_request_to_response( mem_h, &po_start, &po_end );
 		return SIOT_MESH_RET_OK;
 	}
 	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
 
 	// packet "from Santa" will be sent... let's form a packet
-	siot_mesh_form_packet_from_santa( mem_h, target_id );
+
+	// TODO: determine which physical links we will use; we will have to iterate over all of them
+	// NOTE: currently we assume that we have a single link with bus_id = 0
+	uint16_t bus_id_to_use = 0;
+	siot_mesh_form_packet_from_santa( mem_h, target_id, bus_id_to_use );
 
 
 	return SIOT_MESH_RET_OK;
 }
 
-uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t src_id, bool payload_present, uint16_t request_id )
+uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_quality_at_first_receiver, bool payload_present, uint16_t request_id )
 {
 	// here we already know that the packet is good enough
 	parser_obj po, po1, po2;
@@ -409,9 +410,6 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 	// TODO: here and then use bit-field processing instead
 	ZEPTO_DEBUG_ASSERT ( header & 1 ); // must already be checked
 	ZEPTO_DEBUG_ASSERT ( ( ( header >> 1 ) & 0x7 ) == SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET ); // must already be checked
-
-	SIOT_MESH_LAST_HOP_DATA last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX ];
-	uint8_t last_rq_hops_cnt = 0;
 
 	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
 	bool extra_headers_present = ( header >> 4 ) & 0x1;
@@ -426,10 +424,10 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 		{
 			case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
 			{
-				last_hops[ last_rq_hops_cnt ].last_hop_id = header >> 4;
-				last_hops[ last_rq_hops_cnt ].conn_quality = zepto_parse_encoded_uint8( &po );
-				last_rq_hops_cnt++;
-				ZEPTO_DEBUG_ASSERT( last_rq_hops_cnt <= SIOT_MESH_LAST_HOP_DATA_MAX ); // TODO: here at ROOT we may allow longer lists (with a bit different implementation)
+				uint16_t last_hop_id = header >> 4;
+				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po ); 
+				uint8_t conn_q = zepto_parse_encoded_uint8( &po );
+				siot_mesh_at_root_add_last_hop_in_data( src_id, last_hop_id, last_hop_bus_id, conn_q ); 
 				break;
 			}
 			case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
@@ -460,6 +458,9 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 #else // SA_DEBUG
 	zepto_parse_encoded_uint16( &po ); // just skip
 #endif // SA_DEBUG
+
+
+	void siot_mesh_at_root_add_last_hop_out_data( src_id, bus_id_at_src, first_receiver_id, conn_quality_at_first_receiver );
 
 	// OPTIONAL-PAYLOAD-SIZE
 
@@ -515,7 +516,33 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 #endif // SA_DEBUG
 }
 
-uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
+uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
+{
+	return 0;
+}
+
+uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h )
+{
+	// WARNING: this development is just in the middle ... don't be surprized ...
+	// NOTE: there are a number of things that can be done by timer; on this development stage we assume that they happen somehow in the order as implemented
+	// TODO: actual implementation
+	static bool route_table_created = false;
+	if ( route_table_created )
+		return SIOT_MESH_RET_OK;
+	uint16_t target_id = 1;
+	uint16_t bus_id_at_target;
+	uint16_t id_from;
+	uint16_t bus_id_at_prev;
+	uint16_t id_next;
+	siot_mesh_at_root_find_best_route( target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
+	siot_mesh_at_root_remove_last_hop_data( target_id );
+	uint8_t siot_mesh_at_root_add_updates_for_device( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
+	handler_siot_mesh_prepare_route_update( mem_h );
+
+	return 0;
+}
+
+uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t conn_quality )
 {
 	// When a packet just comes, it can be anything starting from total garbage through incomplete packet good for sending NAK only to a packet that is good for further processing.
 	// Complete processing may require a number of steps that are hard to revert, if performed, and a packet is not good enough for processing.
@@ -570,6 +597,9 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 				// SOURCE-ID
 				uint16_t src_id = zepto_parse_encoded_uint16( &po );
 
+				// BUS-ID-AT-SOURCE
+				uint16_t bus_id_at_src = zepto_parse_encoded_uint16( &po );
+
 				// REQUEST-ID
 				uint16_t request_id = zepto_parse_encoded_uint16( &po );
 
@@ -600,8 +630,8 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 					}
 					else
 					{
-						// TODO: we're done
-						siot_mesh_process_received_tosanta_packet( mem_h, src_id, remaining_size > 2, request_id );
+						// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
+						siot_mesh_process_received_tosanta_packet( mem_h, src_id, bus_id_at_src, 0, conn_quality, remaining_size > 2, request_id );
 						// TODO: what are and what to do with ret values?
 						return SIOT_MESH_RET_PASS_TO_PROCESS;
 					}
@@ -626,9 +656,15 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h )
 	}
 	else
 	{
-		ZEPTO_DEBUG_PRINTF_3( "Error: unexpected packet type %d,%d received\n", header& 1, (header >> 1) & 0xF );
-		ZEPTO_DEBUG_ASSERT( NULL == "Error: processing of mesh packets of ANY type is not implemented\n" );
-		return SIOT_MESH_RET_ERROR_ANY; // just as long as not implemented to make compiler happy
+		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
+		// we assume that in such "underdeveloped" packets the whole header is 0
+		ZEPTO_DEBUG_ASSERT( header == 0 ); // as long as packet processing will be properly developed with all details
+		parser_obj po1;
+		zepto_parser_init_by_parser( &po1, &po );
+		zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+		zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
+
+		return SIOT_MESH_RET_PASS_TO_PROCESS;
 	}
 	return SIOT_MESH_RET_OK;
 }
@@ -697,6 +733,10 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 				// LAST-HOP
 				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
 				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
+
+				// LAST-HOP-BUS-ID
+				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po );
+				ZEPTO_DEBUG_ASSERT( last_hop_bus_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// REQUEST-ID
 				uint16_t request_id = zepto_parse_encoded_uint16( &po );
@@ -780,13 +820,13 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 				if ( last_requests[0].ineffect && request_id == last_requests[0].rq_id )
 				{
 					one_of_recent_requests = true;
-					siot_mesh_add_last_hop_data( 0, last_hop_id, signal_level | ( error_cnt << 4 ) );
+					siot_mesh_add_last_hop_data( 0, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 					*mesh_val = 0;
 				}
 				else if ( last_requests[1].ineffect && request_id == last_requests[1].rq_id )
 				{
 					one_of_recent_requests = true;
-					siot_mesh_add_last_hop_data( 1, last_hop_id, signal_level | ( error_cnt << 4 ) );
+					siot_mesh_add_last_hop_data( 1, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 					*mesh_val = 1;
 				}
 				else
@@ -795,7 +835,7 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 					*mesh_val = 0;
 					if ( last_requests[0].ineffect )
 						*mesh_val = 1;
-					siot_mesh_init_last_hop_data_storage( *mesh_val, request_id, last_hop_id, signal_level | ( error_cnt << 4 ) );
+					siot_mesh_init_last_hop_data_storage( *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 				}
 
 				return SIOT_MESH_RET_PASS_TO_PROCESS;
@@ -811,14 +851,20 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 	}
 	else
 	{
-		ZEPTO_DEBUG_PRINTF_3( "Error: unexpected packet type %d,%d received\n", header& 1, (header >> 1) & 0xF );
-		ZEPTO_DEBUG_ASSERT( NULL == "Error: processing of mesh packets of ANY type is not implemented\n" );
-		return SIOT_MESH_RET_ERROR_ANY; // just as long as not implemented to make compiler happy
+		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
+		// we assume that in such "underdeveloped" packets the whole header is 0
+		ZEPTO_DEBUG_ASSERT( header == 0 ); // as long as packet processing will be properly developed with all details
+		parser_obj po1;
+		zepto_parser_init_by_parser( &po1, &po );
+		zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+		zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
+
+		return SIOT_MESH_RET_PASS_TO_PROCESS;
 	}
 	return SIOT_MESH_RET_OK;
 }
 
-void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t target_id )
+void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint16_t target_id )
 {
 	// Santa Packet structure: | SAMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
@@ -846,6 +892,9 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uin
 	// SOURCE-ID
 	zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
 
+	// BUS-ID-AT-SOURCE
+	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // TODO: actual value must be used
+
 	// REQUEST-ID
 	zepto_parser_encode_and_append_uint16( mem_h, request_id );
 
@@ -869,23 +918,23 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uin
 	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 }
 
-uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t target_id )
+uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint16_t target_id, uint16_t* link_id )
 {
-/*	parser_obj po_start, po_end;
-	zepto_parser_init( &po_start, mem_h );
-	zepto_parser_init( &po_end, mem_h );
-	zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
-	zepto_convert_part_of_request_to_response( mem_h, &po_start, &po_end );
-	return SIOT_MESH_RET_OK;*/
-
-	// let's start implementing our response :)
-	uint16_t link_id;
-	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
+	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
 	{
 		// prepare a message for sending according to link_id received
 		// TODO: what should we do, if the root in the route table, but incoming packet was "from Santa"?
-		ZEPTO_DEBUG_ASSERT( NULL == "Error: not implemented\n" );
+
+		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
+		// we assume that in such "underdeveloped" packets the whole header is 0
+
+		zepto_parser_encode_and_append_uint16( mem_h, 0 ); // header
+		parser_obj po_start, po_end;
+		zepto_parser_init( &po_start, mem_h );
+		zepto_parser_init( &po_end, mem_h );
+		zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+		zepto_append_part_of_request_to_response( mem_h, &po_start, &po_end );
 		return SIOT_MESH_RET_OK;
 	}
 	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );

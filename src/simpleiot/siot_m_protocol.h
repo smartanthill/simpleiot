@@ -90,16 +90,37 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 
 
 #ifdef USED_AS_MASTER
-uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h );
-uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t target_id );
-#else
+uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t conn_quality );
+uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t* link_id );
+uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h );
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
+void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
+uint16_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
+uint16_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id );
+uint8_t siot_mesh_at_root_add_updates_for_device( uint16_t id_target, uint16_t bus_to_send_from_target, uint16_t id_prev, uint16_t bust_to_send_from_prev, uint16_t id_next /*more data may be required*/ );
+void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
+
+#ifdef __cplusplus
+}
+#endif
+
+#else // USED_AS_MASTER
+
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt );
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h );
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val );
-uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t target_id );
-#endif
+uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint16_t target_id, uint16_t* link_id );
+
+#endif // USED_AS_MASTER
 
 void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
+
+void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
 
 
 #endif // __SIOT_M_PROTOCOL_H__
