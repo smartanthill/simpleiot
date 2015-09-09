@@ -26,6 +26,32 @@ typedef struct _SIOT_MESH_LAST_HOP_DATA
 	uint8_t conn_quality;
 } SIOT_MESH_LAST_HOP_DATA;
 
+// service functions
+
+uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t sz, uint16_t accum_val )
+{
+	uint16_t i;
+	for ( i=offset; i<offset+sz; i++ )
+	{
+		accum_val += memory_object_read_response_byte( mem_h, i ); // do something simple for a while
+		// TODO: actual implementation
+	}
+	return accum_val;
+}
+
+uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val )
+{
+	uint16_t i;
+	parser_obj po;
+	zepto_parser_init_by_parser( &po, po_start );
+	for ( i=0; i<sz; i++ )
+	{
+		accum_val += zepto_parse_uint8( &po ); // do something simple for a while
+		// TODO: actual implementation
+	}
+	return accum_val;
+}
+
 #ifdef USED_AS_MASTER
 
 // NOTE: On a ROOT (MASTER) side any implementation is inevitably quite complicated as
@@ -37,17 +63,6 @@ typedef struct _SIOT_MESH_LAST_HOP_DATA
 // which should NOT be taken as a code sample for embadded programming.
 
 // We will declare all necessary interface calls below.
-#define SIOT_MESH_LAST_HOP_DATA_MAX 4
-
-uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t sz, uint16_t accum_val )
-{
-	return 0;
-}
-
-uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val )
-{
-	return 0;
-}
 
 #else // USED_AS_MASTER
 
@@ -274,32 +289,6 @@ uint16_t siot_mesh_calculate_route_table_checksum()
 	return 0;
 }
 
-// service functions
-
-uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t sz, uint16_t accum_val )
-{
-	uint16_t i;
-	for ( i=offset; i<offset+sz; i++ )
-	{
-		accum_val += memory_object_read_response_byte( mem_h, i ); // do something simple for a while
-		// TODO: actual implementation
-	}
-	return accum_val;
-}
-
-uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val )
-{
-	uint16_t i;
-	parser_obj po;
-	zepto_parser_init_by_parser( &po, po_start );
-	for ( i=0; i<sz; i++ )
-	{
-		accum_val += zepto_parse_uint8( &po ); // do something simple for a while
-		// TODO: actual implementation
-	}
-	return accum_val;
-}
-
 #endif // !defined USED_AS_MASTER
 
 
@@ -452,6 +441,13 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 	zepto_parse_encoded_uint16( &po ); // just skip
 #endif // SA_DEBUG
 
+	// BUS-ID-AT-SOURCE
+#ifdef SA_DEBUG
+	ZEPTO_DEBUG_ASSERT( bus_id_at_src == zepto_parse_encoded_uint16( &po ) ); // must coincide
+#else // SA_DEBUG
+	zepto_parse_encoded_uint16( &po ); // just skip
+#endif // SA_DEBUG
+
 	// REQUEST-ID
 #ifdef SA_DEBUG
 	ZEPTO_DEBUG_ASSERT( request_id == zepto_parse_encoded_uint16( &po ) ); // must coincide
@@ -460,7 +456,7 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 #endif // SA_DEBUG
 
 
-	void siot_mesh_at_root_add_last_hop_out_data( src_id, bus_id_at_src, first_receiver_id, conn_quality_at_first_receiver );
+	siot_mesh_at_root_add_last_hop_out_data( src_id, bus_id_at_src, first_receiver_id, conn_quality_at_first_receiver );
 
 	// OPTIONAL-PAYLOAD-SIZE
 
@@ -538,7 +534,7 @@ uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
 	zepto_write_uint8( mem_h, 0 );
 	zepto_write_uint8( mem_h, 0 );
 
-	return SIOT_MESH_RET_PASS_TO_CCP;
+	return SIOT_MESH_RET_OK;
 }
 
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h )
@@ -549,7 +545,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	static bool route_table_created = false;
 	static bool hop_data_added = false;
 	uint8_t ret_code;
-	if ( !hop_data_added )
+//	if ( !hop_data_added )
 	{
 		uint16_t target_id = 1;
 		uint16_t bus_id_at_target;
@@ -557,14 +553,14 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		uint16_t bus_id_at_prev;
 		uint16_t id_next;
 		uint8_t ret_code = siot_mesh_at_root_find_best_route( target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
-		if ( ret_code == SIOT_MESH_AT_ROOT_RET_FAILED )
+		if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
 		{
 			siot_mesh_at_root_remove_last_hop_data( target_id );
 			ret_code = siot_mesh_at_root_add_updates_for_device( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
 			hop_data_added = true;
 		}
 	}
-	if ( !route_table_created )
+//	if ( !route_table_created )
 	{
 		ret_code = handler_siot_mesh_prepare_route_update( mem_h );
 		if ( ret_code == SIOT_MESH_RET_OK )
@@ -611,7 +607,8 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t conn_qual
 					{
 						case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
 						{
-							zepto_parse_encoded_uint8( &po ); // just skip
+							zepto_parse_encoded_uint16( &po ); // last_hop_bus_id; just skip
+							zepto_parse_encoded_uint8( &po ); // connection quality; just skip
 							break;
 						}
 						case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:

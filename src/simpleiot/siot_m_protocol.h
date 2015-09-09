@@ -107,6 +107,7 @@ extern "C" {
 #define SIOT_MESH_AT_ROOT_RET_NO_UPDATES 4
 #define SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES 5
 
+void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
 void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
 uint8_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
@@ -121,6 +122,8 @@ uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h );
 
 #else // USED_AS_MASTER
 
+void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
+void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt );
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h );
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val );
@@ -128,9 +131,7 @@ uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, u
 
 #endif // USED_AS_MASTER
 
-void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
 
-void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
 
 
 #endif // __SIOT_M_PROTOCOL_H__
