@@ -91,10 +91,6 @@ void zepto_write_uint8( REQUEST_REPLY_HANDLE mem_h, uint8_t val );
 //void zepto_write_encoded_uint16( REQUEST_REPLY_HANDLE mem_h, uint16_t val );
 void zepto_write_block( REQUEST_REPLY_HANDLE mem_h, const uint8_t* block, uint16_t size );
 
-#ifdef __cplusplus
-}
-#endif
-
 // extended writing functions
 void zepto_response_to_request( MEMORY_HANDLE mem_h );
 void zepto_convert_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end );
@@ -146,5 +142,9 @@ void zepto_parser_encode_and_prepend_uint( MEMORY_HANDLE mem_h, const uint8_t* n
 uint16_t memory_object_get_request_size( REQUEST_REPLY_HANDLE mem_h );
 uint16_t memory_object_get_response_size( REQUEST_REPLY_HANDLE mem_h );
 uint8_t memory_object_read_response_byte( REQUEST_REPLY_HANDLE mem_h, uint16_t offset );
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // __SIOT_MEM_MNGMT_H__

@@ -518,7 +518,27 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 
 uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
 {
-	return 0;
+	uint8_t ret_code;
+	uint16_t flags = 0;
+	zepto_parser_encode_and_append_uint16( mem_h, flags );
+
+	// TEMPORARY CODE: add ccp staff
+	zepto_write_uint8( mem_h, 0 ); // intermediate packet
+	zepto_write_uint8( mem_h, 0x5 ); // SACCP_PHY_AND_ROUTING_DATA
+
+	// here we should add initial checksum
+	zepto_write_uint8( mem_h, 0 );
+	zepto_write_uint8( mem_h, 0 );
+
+	ret_code = siot_mesh_at_root_load_update_to_packet( mem_h );
+	if ( ret_code != SIOT_MESH_RET_OK )
+		return ret_code;
+
+	// here we should add resulting checksum
+	zepto_write_uint8( mem_h, 0 );
+	zepto_write_uint8( mem_h, 0 );
+
+	return SIOT_MESH_RET_PASS_TO_CCP;
 }
 
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h )
@@ -527,19 +547,34 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	// NOTE: there are a number of things that can be done by timer; on this development stage we assume that they happen somehow in the order as implemented
 	// TODO: actual implementation
 	static bool route_table_created = false;
-	if ( route_table_created )
-		return SIOT_MESH_RET_OK;
-	uint16_t target_id = 1;
-	uint16_t bus_id_at_target;
-	uint16_t id_from;
-	uint16_t bus_id_at_prev;
-	uint16_t id_next;
-	siot_mesh_at_root_find_best_route( target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
-	siot_mesh_at_root_remove_last_hop_data( target_id );
-	uint8_t siot_mesh_at_root_add_updates_for_device( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
-	handler_siot_mesh_prepare_route_update( mem_h );
-
-	return 0;
+	static bool hop_data_added = false;
+	uint8_t ret_code;
+	if ( !hop_data_added )
+	{
+		uint16_t target_id = 1;
+		uint16_t bus_id_at_target;
+		uint16_t id_from;
+		uint16_t bus_id_at_prev;
+		uint16_t id_next;
+		uint8_t ret_code = siot_mesh_at_root_find_best_route( target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
+		if ( ret_code == SIOT_MESH_AT_ROOT_RET_FAILED )
+		{
+			siot_mesh_at_root_remove_last_hop_data( target_id );
+			ret_code = siot_mesh_at_root_add_updates_for_device( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
+			hop_data_added = true;
+		}
+	}
+	if ( !route_table_created )
+	{
+		ret_code = handler_siot_mesh_prepare_route_update( mem_h );
+		if ( ret_code == SIOT_MESH_RET_OK )
+		{
+			route_table_created = true;
+			return SIOT_MESH_RET_PASS_TO_CCP;
+		}
+	}
+		
+	return SIOT_MESH_RET_OK;
 }
 
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t conn_quality )

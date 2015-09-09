@@ -84,9 +84,11 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED 3
 #define SIOT_MESH_RET_PASS_TO_PROCESS 4
 #define SIOT_MESH_RET_PASS_TO_SEND 5
+#define SIOT_MESH_RET_PASS_TO_CCP 6
 // internal errors (TODO: should not be exposed)
-#define SIOT_MESH_RET_ERROR_NOT_FOUND 6
-#define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 7
+#define SIOT_MESH_RET_ERROR_NOT_FOUND 16
+#define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 17
+
 
 
 #ifdef USED_AS_MASTER
@@ -98,12 +100,20 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 extern "C" {
 #endif
 
+#define SIOT_MESH_AT_ROOT_RET_OK 0
+#define SIOT_MESH_AT_ROOT_RET_FAILED 1
+#define SIOT_MESH_AT_ROOT_RET_ALREADY_EXISTS 2
+#define SIOT_MESH_AT_ROOT_RET_NOT_FOUND 3
+#define SIOT_MESH_AT_ROOT_RET_NO_UPDATES 4
+#define SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES 5
+
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
 void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
-uint16_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
-uint16_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id );
+uint8_t siot_mesh_at_root_find_best_route( uint16_t target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
+uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id );
 uint8_t siot_mesh_at_root_add_updates_for_device( uint16_t id_target, uint16_t bus_to_send_from_target, uint16_t id_prev, uint16_t bust_to_send_from_prev, uint16_t id_next /*more data may be required*/ );
 void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
+uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h );
 
 #ifdef __cplusplus
 }
