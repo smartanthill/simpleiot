@@ -410,7 +410,7 @@ uint8_t handler_saccp_timer( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa_t
 	}
 }
 
-extern uint8_t handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
+extern void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
 
 uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa_time_val* currt, waiting_for* wf )
 {
@@ -527,6 +527,7 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa
 			zepto_parser_encode_and_prepend_uint16( mem_h, ret_head );
 			uint8_t first_byte_back = SAGDP_P_STATUS_TERMINATING; // TODO: this is nowhere specified. Make sure this approach is OK
 			zepto_write_prepend_byte( mem_h, first_byte_back );
+		ZEPTO_DEBUG_PRINTF_1( "         ############  route update reply is about to be sent  ###########\n" );
 			return SACCP_RET_PASS_LOWER;
 			break;
 		}

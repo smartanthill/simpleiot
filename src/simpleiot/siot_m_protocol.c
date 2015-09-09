@@ -366,6 +366,8 @@ uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint16_t target_id, 
 		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
 		// we assume that in such "underdeveloped" packets the whole header is 0
 
+		ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): known route  ###########\n" );
+
 		zepto_parser_encode_and_append_uint16( mem_h, 0 ); // header
 		parser_obj po_start, po_end;
 		zepto_parser_init( &po_start, mem_h );
@@ -516,11 +518,12 @@ uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
 {
 	uint8_t ret_code;
 	uint16_t flags = 0;
-	zepto_parser_encode_and_append_uint16( mem_h, flags );
 
 	// TEMPORARY CODE: add ccp staff
 	zepto_write_uint8( mem_h, 0 ); // intermediate packet
 	zepto_write_uint8( mem_h, 0x5 ); // SACCP_PHY_AND_ROUTING_DATA
+
+	zepto_parser_encode_and_append_uint16( mem_h, flags );
 
 	// here we should add initial checksum
 	zepto_write_uint8( mem_h, 0 );
@@ -537,11 +540,30 @@ uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
 	return SIOT_MESH_RET_OK;
 }
 
+void handler_siot_process_route_update_response( uint16_t source_dev_id, MEMORY_HANDLE mem_h )
+{
+	parser_obj po;
+	zepto_parser_init( &po, mem_h );
+	uint8_t main_byte = zepto_parse_uint8( &po );
+	if ( main_byte == 0 )
+	{
+		// we remove the latest update to this device from collection of updates
+		siot_mesh_at_root_update_done( source_dev_id );
+	}
+	else
+	{
+		ZEPTO_DEBUG_ASSERT( 0 == "Route table update error processing is not yet implemented" );
+	}
+}
+
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h )
 {
 	// WARNING: this development is just in the middle ... don't be surprized ...
 	// NOTE: there are a number of things that can be done by timer; on this development stage we assume that they happen somehow in the order as implemented
 	// TODO: actual implementation
+
+	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
+
 	static bool route_table_created = false;
 	static bool hop_data_added = false;
 	uint8_t ret_code;
@@ -568,6 +590,8 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			route_table_created = true;
 			return SIOT_MESH_RET_PASS_TO_CCP;
 		}
+		else
+			zepto_parser_free_response( mem_h );
 	}
 		
 	return SIOT_MESH_RET_OK;
@@ -961,6 +985,8 @@ uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, u
 		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
 		// we assume that in such "underdeveloped" packets the whole header is 0
 
+		ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): known route  ###########\n" );
+
 		zepto_parser_encode_and_append_uint16( mem_h, 0 ); // header
 		parser_obj po_start, po_end;
 		zepto_parser_init( &po_start, mem_h );
@@ -1034,6 +1060,7 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 				// NEXT-HOP-ACKS-AND-INTRA-BUS-ID: Encoded-Unsigned-Int<max=4> bitfield substrate 
 				uint32_t ibid_pl_1 = zepto_parse_encoded_uint32( po );
 				link.NEXT_HOP_ACKS = ibid_pl_1 & 1; // bit[0] being a NEXT-HOP-ACKS flag for the Routing Table Entry
+#if 0 // not yet implemented at all
 				link.INTRA_BUS_ID = ibid_pl_1 >> 1; // bits[1..] representing INTRA-BUS-ID-PLUS-1
 				if ( link.INTRA_BUS_ID == 0 ) // means that INTRA-BUS-ID==NULL, and therefore that the link entry is an incoming link entry
 				{
@@ -1042,6 +1069,7 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 				}
 				else
 					(link.INTRA_BUS_ID)--; // TODO: distinguishing NULL and 0
+#endif // 0
 				if ( link_delay_present )
 				{
 					link.LINK_DELAY_UNIT = zepto_parse_encoded_uint16( po );
