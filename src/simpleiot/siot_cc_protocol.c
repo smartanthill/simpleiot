@@ -525,10 +525,10 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa
 			handler_siot_process_route_update_request( &po, mem_h );
 			uint16_t ret_head = SACCP_PHY_AND_ROUTING_DATA; // additional bits are 0
 			zepto_parser_encode_and_prepend_uint16( mem_h, ret_head );
-			uint8_t first_byte_back = SAGDP_P_STATUS_TERMINATING; // TODO: this is nowhere specified. Make sure this approach is OK
+			uint8_t first_byte_back = SAGDP_P_STATUS_TERMINATING | SAGDP_P_STATUS_IS_CONTROL; // TODO: this is nowhere specified. Make sure this approach is OK
 			zepto_write_prepend_byte( mem_h, first_byte_back );
 		ZEPTO_DEBUG_PRINTF_1( "         ############  route update reply is about to be sent  ###########\n" );
-			return SACCP_RET_PASS_LOWER;
+			return SACCP_RET_PASS_LOWER_CONTROL;
 			break;
 		}
 		default:

@@ -27,6 +27,13 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "../simpleiot_hal/hal_waiting.h"
 
 
+// SAGDP Contexts
+#define SAGDP_CONTEXT_UNKNOWN 0XFF // to be supplied as a parameter, if a call is for any context (say, timer, or receiving incoming packet)
+#define SAGDP_CONTEXT_APPLICATION 0 // serves as an index in the array of contexts
+#define SAGDP_CONTEXT_CONTROL 1 // serves as an index in the array of contexts
+#define SAGDP_CONTEXT_CNT 2 // KEEP UPDATED!!!
+
+
 // RET codes
 #define SAGDP_RET_SYS_CORRUPTED 0 // data processing inconsistency detected
 #define SAGDP_RET_OK 1 // no output is available and no further action is required
@@ -55,7 +62,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #define SAGDP_P_STATUS_FIRST 1
 #define SAGDP_P_STATUS_TERMINATING 2
 #define SAGDP_P_STATUS_MASK ( SAGDP_P_STATUS_FIRST | SAGDP_P_STATUS_TERMINATING )
-//#define SAGDP_P_STATUS_NO_RESEND 4
+#define SAGDP_P_STATUS_IS_CONTROL 4
 #define SAGDP_P_STATUS_ACK 8
 #define SAGDP_P_STATUS_ERROR_MSG ( SAGDP_P_STATUS_FIRST | SAGDP_P_STATUS_TERMINATING )
 #define SAGDP_P_STATUS_IS_ACK ( SAGDP_P_STATUS_FIRST | SAGDP_P_STATUS_TERMINATING | SAGDP_P_STATUS_ACK )
@@ -80,9 +87,9 @@ typedef struct _SAGDP_DATA
 
 // handlers
 void sagdp_init( /*SAGDP_DATA* sagdp_data*/ );
-uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
-uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
-uint8_t handler_sagdp_receive_request_resend_lsp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
-uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
+uint8_t handler_sagdp_timer( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
+uint8_t handler_sagdp_receive_up( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
+uint8_t handler_sagdp_receive_request_resend_lsp( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
+uint8_t handler_sagdp_receive_hlp( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr/*, SAGDP_DATA* sagdp_data*/ );
 
 #endif // __SAGDP_PROTOCOL_H__

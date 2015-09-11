@@ -520,7 +520,7 @@ uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
 	uint16_t flags = 0;
 
 	// TEMPORARY CODE: add ccp staff
-	zepto_write_uint8( mem_h, 0 ); // intermediate packet
+	zepto_write_uint8( mem_h, 0x5 ); // first, control
 	zepto_write_uint8( mem_h, 0x5 ); // SACCP_PHY_AND_ROUTING_DATA
 
 	zepto_parser_encode_and_append_uint16( mem_h, flags );
@@ -540,7 +540,7 @@ uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
 	return SIOT_MESH_RET_OK;
 }
 
-void handler_siot_process_route_update_response( uint16_t source_dev_id, MEMORY_HANDLE mem_h )
+void handler_siot_mesh_process_route_update_response( uint16_t source_dev_id, MEMORY_HANDLE mem_h )
 {
 	parser_obj po;
 	zepto_parser_init( &po, mem_h );

@@ -31,8 +31,9 @@ Copyright (C) 2015 OLogN Technologies AG
 #define SACCP_RET_FAILED 0 // any failure
 #define SACCP_RET_DONE 1 // any failure
 #define SACCP_RET_PASS_LOWER 2 // packet must be sent to a communication peer
-#define SACCP_RET_WAIT 3 // processing is not over; WaitingFor describes details
-#define SACCP_RET_NO_WAITING 4 // protocol is not in waiting state
+#define SACCP_RET_PASS_LOWER_CONTROL 3 // packet must be sent to a communication peer
+#define SACCP_RET_WAIT 4 // processing is not over; WaitingFor describes details
+#define SACCP_RET_NO_WAITING 5 // protocol is not in waiting state
 
 void zepto_vm_init();
 
