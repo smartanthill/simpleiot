@@ -46,10 +46,6 @@ typedef struct _SAGDP_DATA
 // SAGDP Contexts
 SAGDP_DATA sagdp_context_app;
 SAGDP_DATA sagdp_context_ctr;
-#define SAGDP_CONTEXT_UNKNOWN 0XFF // to be supplied as a parameter, if a call is for any context (say, timer, or receiving incoming packet)
-#define SAGDP_CONTEXT_APPLICATION 0 // serves as an index in the array of contexts
-#define SAGDP_CONTEXT_CONTROL 1 // serves as an index in the array of contexts
-#define SAGDP_CONTEXT_CNT 2 // KEEP UPDATED!!!
 
 
 // RET codes
