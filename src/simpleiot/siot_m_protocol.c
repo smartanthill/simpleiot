@@ -372,35 +372,75 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, 
 	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 }
 
-uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t* link_id )
+void siot_mesh_form_unicast_packet( uint16_t target_id, MEMORY_HANDLE mem_h, uint16_t link_id )
+{
+	//  | SAMP-UNICAST-DATA-PACKET-FLAGS-AND-TTL | OPTIONAL-EXTRA-HEADERS | NEXT-HOP | LAST-HOP | Non-Root-Address | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+
+	parser_obj po, po1;
+	uint16_t header;
+	SIOT_MESH_LINK link;
+	uint8_t ret_code = siot_mesh_get_link( target_id, link_id, &link );
+	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK ); // we do not expect that being here we have an invalid link_id
+	ZEPTO_DEBUG_ASSERT( link.LINK_ID == link_id );
+	// !!! TODO: it might happen that this packet is not a reply to 'from Santa'; check, which data should be added this case
+
+	// header: bit[0]: 0, bit[1]: GUARANTEED-DELIVERY flag, bit[2]: BACKWARD-GUARANTEED-DELIVERY, bit[3]: EXTRA-HEADERS-PRESENT, bit[4]: DIRECTION-FLAG (is from the Root), bits[5..]: TTL
+	uint16_t ttl = 4; // TODO: source??
+	// TODO: set other fields as necessary
+	header = 0 | ( 1 << 4 ) | ( ttl << 5 );
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+
+	// OPTIONAL-EXTRA-HEADERS
+	// (none so far)
+
+	// NEXT-HOP
+	zepto_parser_encode_and_append_uint16( mem_h, link.NEXT_HOP );
+
+	// LAST-HOP
+	zepto_parser_encode_and_append_uint16( mem_h, 0 );
+
+	// Non-Root-Address
+	zepto_parser_encode_and_append_uint16( mem_h, target_id );
+
+	// OPTIONAL-PAYLOAD-SIZE
+
+	// HEADER-CHECKSUM
+	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
+	uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, 0, rsp_sz, 0 );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+
+	// PAYLOAD
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+	zepto_append_part_of_request_to_response( mem_h, &po, &po1 );
+
+	// FULL-CHECKSUM
+	checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+}
+
+uint8_t handler_siot_mesh_send_packet( uint16_t target_id, MEMORY_HANDLE mem_h, uint16_t* link_id )
 {
 	uint8_t ret_code = siot_mesh_at_root_target_to_link_id( target_id, link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
 	{
-		// prepare a message for sending according to link_id received
-		// TODO: what should we do, if the root in the route table, but incoming packet was "from Santa"?
-
-		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
-		// we assume that in such "underdeveloped" packets the whole header is 0
-
 		ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): known route  ###########\n" );
-
-		zepto_parser_encode_and_append_uint16( mem_h, 0 ); // header
-		parser_obj po_start, po_end;
-		zepto_parser_init( &po_start, mem_h );
-		zepto_parser_init( &po_end, mem_h );
-		zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
-		zepto_append_part_of_request_to_response( mem_h, &po_start, &po_end );
-		return SIOT_MESH_RET_OK;
+		siot_mesh_form_unicast_packet( target_id, mem_h, *link_id );
 	}
-	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
+	else
+	{
+		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
 
-	// packet "from Santa" will be sent... let's form a packet
+		// packet "from Santa" will be sent... let's form a packet
 
-	// TODO: determine which physical links we will use; we will have to iterate over all of them
-	// NOTE: currently we assume that we have a single link with bus_id = 0
-	uint16_t bus_id_to_use = 0;
-	siot_mesh_form_packet_from_santa( mem_h, target_id, bus_id_to_use );
+		// TODO: determine which physical links we will use; we will have to iterate over all of them
+		// NOTE: currently we assume that we have a single link with bus_id = 0
+		uint16_t bus_id_to_use = 0;
+		siot_mesh_form_packet_from_santa( mem_h, target_id, bus_id_to_use );
+	}
 
 
 	return SIOT_MESH_RET_OK;
@@ -741,14 +781,6 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint16_t* src_id,
 	}
 	else
 	{
-		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
-		// we assume that in such "underdeveloped" packets the whole header is 0
-/*		ZEPTO_DEBUG_ASSERT( header == 0 ); // as long as packet processing will be properly developed with all details
-		parser_obj po1;
-		zepto_parser_init_by_parser( &po1, &po );
-		zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-		zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );*/
-	
 		//  | SAMP-UNICAST-DATA-PACKET-FLAGS-AND-TTL | OPTIONAL-EXTRA-HEADERS | NEXT-HOP | LAST-HOP | Non-Root-Address | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 
 		// header: bit[0]: 0, bit[1]: GUARANTEED-DELIVERY flag, bit[2]: BACKWARD-GUARANTEED-DELIVERY, bit[3]: EXTRA-HEADERS-PRESENT, bit[4]: DIRECTION-FLAG (is from the Root), bits[5..]: TTL
@@ -816,8 +848,10 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint16_t* src_id,
 			else
 			{
 				// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
-//				siot_mesh_process_received_tosanta_packet( mem_h, src_id, bus_id_at_src, 0, conn_quality, remaining_size > 2, request_id );
-				// TODO: what are and what to do with ret values?
+				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po2 );
+				zepto_parser_init_by_parser( &po1, &po2 );
+				zepto_parse_skip_block( &po1, remaining_size - 2 );
+				zepto_convert_part_of_request_to_response( mem_h, &po2, &po1 );
 				return SIOT_MESH_RET_PASS_TO_PROCESS;
 			}
 		}
@@ -1017,13 +1051,103 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 	}
 	else
 	{
-		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
+/*		// for intermediate stages of development we treat all packets with first bit 0 as "ordinary packets" the rest of which is a payload to be passed to upper levels.
 		// we assume that in such "underdeveloped" packets the whole header is 0
 		ZEPTO_DEBUG_ASSERT( header == 0 ); // as long as packet processing will be properly developed with all details
 		parser_obj po1;
 		zepto_parser_init_by_parser( &po1, &po );
 		zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
 		zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
+
+		return SIOT_MESH_RET_PASS_TO_PROCESS;*/
+		//  | SAMP-UNICAST-DATA-PACKET-FLAGS-AND-TTL | OPTIONAL-EXTRA-HEADERS | NEXT-HOP | LAST-HOP | Non-Root-Address | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+
+		// header: bit[0]: 0, bit[1]: GUARANTEED-DELIVERY flag, bit[2]: BACKWARD-GUARANTEED-DELIVERY, bit[3]: EXTRA-HEADERS-PRESENT, bit[4]: DIRECTION-FLAG (is from the Root), bits[5..]: TTL
+		bool guaranteed_delivery = ( header >> 1 ) & 0x1;;
+		bool backward_guaranteed_delivery = ( header >> 2 ) & 0x1;
+		bool extra_headers_present = ( header >> 3 ) & 0x1;
+		bool direction_flag = ( header >> 3 ) & 0x1;
+
+		if ( direction_flag )
+			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
+		// uint16_t TTL = header >> 5;
+		// now we're done with the header; proceeding to optional headers...
+		while ( extra_headers_present )
+		{
+			header = zepto_parse_encoded_uint16( &po );
+			extra_headers_present = header & 0x1;
+			uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
+			switch ( generic_flags )
+			{
+				case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
+				case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
+				case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
+				case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
+				{
+					ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+					break;
+				}
+			}
+		}
+
+		// NEXT-HOP
+		uint16_t next_hop = zepto_parse_encoded_uint16( &po ); // TODO: here, in a correct packet we expect to see 0; what to do in case of errors?
+
+		// LAST-HOP
+		uint16_t last_hop = zepto_parse_encoded_uint16( &po );
+
+		// Non-Root-Address
+		uint16_t src_id = zepto_parse_encoded_uint16( &po );
+
+		if ( src_id != DEVICE_SELF_ID )
+		{
+			// TODO: it is much more complicated in case of retransmitter
+			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
+		}
+
+		// OPTIONAL-PAYLOAD-SIZE
+
+		// HEADER-CHECKSUM
+		uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
+		uint16_t checksum = zepto_parse_uint8( &po );
+		checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+		zepto_parser_init_by_parser( &po1, &po );
+
+		if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
+
+		uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+		if ( remaining_size >= 2 )
+		{
+			zepto_parser_init_by_parser( &po2, &po );
+			zepto_parse_skip_block( &po, remaining_size - 2 );
+			actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
+			checksum = zepto_parse_uint8( &po );
+			checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+			if ( actual_checksum != checksum )
+			{
+				// TODO: we have only a partially received packet; prepare NACK
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+				return SIOT_MESH_RET_PASS_TO_SEND;
+			}
+			else
+			{
+				// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
+				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po2 );
+				zepto_parser_init_by_parser( &po1, &po2 );
+				zepto_parse_skip_block( &po1, remaining_size - 2 );
+				zepto_convert_part_of_request_to_response( mem_h, &po2, &po1 );
+				return SIOT_MESH_RET_PASS_TO_PROCESS;
+			}
+		}
+		else // packet is broken; subject for NAK
+		{
+			// TODO: we have only a partially received packet; prepare NACK
+			ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+			return SIOT_MESH_RET_PASS_TO_SEND;
+		}
+
+		ZEPTO_DEBUG_ASSERT( NULL == "Error: we should not reach this point\n" );
 
 		return SIOT_MESH_RET_PASS_TO_PROCESS;
 	}
@@ -1164,9 +1288,9 @@ uint8_t handler_siot_mesh_send_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val, u
 
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val )
 {
-	ZEPTO_DEBUG_ASSERT( *mesh_val < 2 );
-	if ( siot_mesh_clean_last_hop_data_storage_if_single_element( *mesh_val ) )
-		*mesh_val = 0xFF;
+	if ( *mesh_val < 2 )
+		if ( siot_mesh_clean_last_hop_data_storage_if_single_element( *mesh_val ) )
+			*mesh_val = 0xFF;
 	return SIOT_MESH_RET_OK;
 }
 
