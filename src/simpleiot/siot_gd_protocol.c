@@ -21,7 +21,9 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_gd_protocol.h"
 
-static SAGDP_DATA sagdp_context[ SAGDP_CONTEXT_CNT ];
+//static SAGDP_DATA sagdp_context[ SAGDP_CONTEXT_CNT ];
+SAGDP_DATA sagdp_context_app;
+SAGDP_DATA sagdp_context_ctr;
 
 // SAGDP timer constants
 // TODO: revise when values are finalized in the documentation
@@ -65,22 +67,18 @@ bool is_pid_zero( const sa_uint48_t pid )
 
 
 
-void sagdp_init( /*SAGDP_DATA* sagdp_data*/ )
+void sagdp_init( SAGDP_DATA* sagdp_data )
 {
-	uint8_t i;
-	for ( i=0; i<SAGDP_CONTEXT_CNT; i++ )
-	{
-		SAGDP_DATA* sagdp_data = sagdp_context + i;
-		sagdp_data->state = SAGDP_STATE_IDLE;
-		cancelLTO( &(sagdp_data->last_timeout) );
-		sa_uint48_set_zero( sagdp_data->last_received_chain_id );
-		sa_uint48_set_zero( sagdp_data->last_received_packet_id );
-		sa_uint48_set_zero( sagdp_data->first_last_sent_packet_id );
-		sa_uint48_set_zero( sagdp_data->next_last_sent_packet_id );
-		sa_uint48_set_zero( sagdp_data->prev_first_last_sent_packet_id );
-		sagdp_data->resent_ordinal = 0;
-		sagdp_data->event_type = SAGDP_EV_NONE; // in this case we do not care about next_event_time
-	}
+	sagdp_data->state = SAGDP_STATE_IDLE;
+	cancelLTO( &(sagdp_data->last_timeout) );
+	sa_uint48_set_zero( sagdp_data->last_received_chain_id );
+	sa_uint48_set_zero( sagdp_data->last_received_packet_id );
+	sa_uint48_set_zero( sagdp_data->first_last_sent_packet_id );
+	sa_uint48_set_zero( sagdp_data->next_last_sent_packet_id );
+	sa_uint48_set_zero( sagdp_data->prev_first_last_sent_packet_id );
+	sagdp_data->resent_ordinal = 0;
+	sagdp_data->event_type = SAGDP_EV_NONE; // in this case we do not care about next_event_time
+
 	ZEPTO_DEBUG_PRINTF_1( "------------ event set to SAGDP_EV_NONE ----------------\n" );
 }
 
@@ -140,7 +138,8 @@ void sagdp_init( /*SAGDP_DATA* sagdp_data*/ )
 
 
 
-uint8_t handler_sagdp_timer_per_context( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+//uint8_t handler_sagdp_timer_per_context( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	uint8_t state = sagdp_data->state;
 	if ( state == SAGDP_STATE_WAIT_REMOTE )
@@ -191,7 +190,7 @@ uint8_t handler_sagdp_timer_per_context( sa_time_val* currt, waiting_for* wf, sa
 		return SAGDP_RET_OK;
 	}
 }
-
+/*
 uint8_t handler_sagdp_timer( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr )
 {
 	uint8_t ret_code;
@@ -225,8 +224,8 @@ uint8_t handler_sagdp_timer( uint8_t* context, sa_time_val* currt, waiting_for* 
 			return handler_sagdp_timer_per_context( currt, wf, nonce, mem_h, mem_h_addr, MEMORY_HANDLE_SAGDP_LSM_2, MEMORY_HANDLE_SAGDP_LSM_2_SAOUDP_ADDR, sagdp_data );
 	}
 }
-
-uint8_t handler_sagdp_receive_up_per_context( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+*/
+uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP():           pid: %x%x%x%x%x%x\n", pid[0], pid[1], pid[2], pid[3], pid[4], pid[5] );
 
@@ -1082,7 +1081,7 @@ uint8_t handler_sagdp_receive_up_per_context( sa_time_val* currt, waiting_for* w
 		return SAGDP_RET_SYS_CORRUPTED;
 	}
 }
-
+/*
 uint8_t handler_sagdp_receive_up( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr )
 {
 	if ( *context != SAGDP_CONTEXT_UNKNOWN )
@@ -1106,9 +1105,17 @@ uint8_t handler_sagdp_receive_up( uint8_t* context, sa_time_val* currt, waiting_
 		else
 			return handler_sagdp_receive_up_per_context( currt, wf, nonce, pid, mem_h, mem_h_addr, MEMORY_HANDLE_SAGDP_LSM_2, MEMORY_HANDLE_SAGDP_LSM_2_SAOUDP_ADDR, sagdp_data );
 	}
+}*/
+
+bool handler_sagdp_is_up_packet_ctr( REQUEST_REPLY_HANDLE mem_h )
+{
+	parser_obj po;
+	zepto_parser_init( &po, mem_h );
+	uint8_t packet_status = zepto_parse_uint8( &po );
+	return packet_status & SAGDP_P_STATUS_IS_CONTROL;
 }
 
-uint8_t handler_sagdp_receive_request_resend_lsp_per_context( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_request_resend_lsp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	// SAGDP can legitimately receive a repeated packet in wait-remote state (the other side sounds like "we have not received anything from you; please resend, only then we will probably send you something new")
 	// LSP must be resent
@@ -1186,7 +1193,7 @@ uint8_t handler_sagdp_receive_request_resend_lsp_per_context( sa_time_val* currt
 		return SAGDP_RET_SYS_CORRUPTED;
 	}
 }
-
+/*
 uint8_t handler_sagdp_receive_request_resend_lsp( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr )
 {
 	uint8_t i;
@@ -1217,9 +1224,9 @@ uint8_t handler_sagdp_receive_request_resend_lsp( uint8_t* context, sa_time_val*
 		else
 			return handler_sagdp_receive_request_resend_lsp_per_context( currt, wf, nonce, mem_h, mem_h_addr, MEMORY_HANDLE_SAGDP_LSM_2, MEMORY_HANDLE_SAGDP_LSM_2_SAOUDP_ADDR, sagdp_data );
 	}
-}
+}*/
 
-uint8_t handler_sagdp_receive_hlp_per_context( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	// It is a responsibility of a higher level to report the status of a packet.
 	//
@@ -1434,6 +1441,10 @@ uint8_t handler_sagdp_receive_hlp_per_context( sa_time_val* currt, waiting_for* 
 	}
 	else if ( state == SAGDP_STATE_WAIT_REMOTE )
 	{
+		if( sagdp_data->event_type != SAGDP_EV_NONE )
+		{
+			sagdp_data->event_type = sagdp_data->event_type;
+		}
 		SAGDP_ASSERT_NO_SEQUENCE;
 
 		if ( packet_status & SAGDP_P_STATUS_FIRST )
@@ -1540,7 +1551,7 @@ uint8_t handler_sagdp_receive_hlp_per_context( sa_time_val* currt, waiting_for* 
 		return SAGDP_RET_SYS_CORRUPTED;
 	}
 }
-
+/*
 uint8_t handler_sagdp_receive_hlp( uint8_t* context, sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr )
 {
 	ZEPTO_DEBUG_ASSERT( *context < SAGDP_CONTEXT_CNT ); // NO CALLS OUT OF CONTEXT!
@@ -1549,6 +1560,6 @@ uint8_t handler_sagdp_receive_hlp( uint8_t* context, sa_time_val* currt, waiting
 		return handler_sagdp_receive_hlp_per_context( currt, wf, nonce, mem_h, mem_h_addr, MEMORY_HANDLE_SAGDP_LSM_1, MEMORY_HANDLE_SAGDP_LSM_1_SAOUDP_ADDR, sagdp_data );
 	else
 		return handler_sagdp_receive_hlp_per_context( currt, wf, nonce, mem_h, mem_h_addr, MEMORY_HANDLE_SAGDP_LSM_2, MEMORY_HANDLE_SAGDP_LSM_2_SAOUDP_ADDR, sagdp_data );
-}
+}*/
 
 #endif // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_GDP) )
