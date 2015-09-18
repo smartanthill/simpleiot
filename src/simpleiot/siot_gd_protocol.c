@@ -21,9 +21,6 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_gd_protocol.h"
 
-SAGDP_DATA sagdp_context_app;
-SAGDP_DATA sagdp_context_ctr;
-
 // SAGDP timer constants
 // TODO: revise when values are finalized in the documentation
 // #define SAGDP_LTO_TO_SEC( x ) x // just 1 unit == 1 sec

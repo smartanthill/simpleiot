@@ -43,11 +43,6 @@ typedef struct _SAGDP_DATA
 } SAGDP_DATA;
 
 
-// SAGDP Contexts
-SAGDP_DATA sagdp_context_app;
-SAGDP_DATA sagdp_context_ctr;
-
-
 // RET codes
 #define SAGDP_RET_SYS_CORRUPTED 0 // data processing inconsistency detected
 #define SAGDP_RET_OK 1 // no output is available and no further action is required
