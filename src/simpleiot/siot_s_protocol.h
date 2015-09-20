@@ -49,15 +49,31 @@ typedef struct _SASP_DATA
 } SASP_DATA;
 
 
+#ifdef USED_AS_MASTER
+
 // initializing and backup
-void sasp_init_eeprom_data_at_lifestart( /*SASP_DATA* sasp_data*/ );
-void sasp_restore_from_backup( /*SASP_DATA* sasp_data*/ );
+void sasp_init_eeprom_data_at_lifestart( SASP_DATA* sasp_data, uint16_t storage_param );
+void sasp_restore_from_backup( SASP_DATA* sasp_data, uint16_t storage_param );
+void handler_sasp_save_state( SASP_DATA* sasp_data, uint16_t storage_param );
 
 // handlers
-uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* packet_id, MEMORY_HANDLE mem_h/*, SASP_DATA* sasp_data*/ );
-uint8_t handler_sasp_send( const uint8_t* key, const uint8_t* packet_id, MEMORY_HANDLE mem_h/*, SASP_DATA* sasp_data*/ );
-uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut/*, SASP_DATA* sasp_data*/ );
-void handler_sasp_save_state( /*SASP_DATA* sasp_data*/ );
+uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* packet_id, MEMORY_HANDLE mem_h, SASP_DATA* sasp_data, uint16_t storage_param );
+uint8_t handler_sasp_send( const uint8_t* key, const uint8_t* packet_id, MEMORY_HANDLE mem_h, SASP_DATA* sasp_data, uint16_t storage_param );
+uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut, SASP_DATA* sasp_data, uint16_t storage_param );
+
+#else // USED_AS_MASTER
+
+// initializing and backup
+void sasp_init_eeprom_data_at_lifestart();
+void sasp_restore_from_backup();
+void handler_sasp_save_state();
+
+// handlers
+uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* packet_id, MEMORY_HANDLE mem_h );
+uint8_t handler_sasp_send( const uint8_t* key, const uint8_t* packet_id, MEMORY_HANDLE mem_h );
+uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut );
+
+#endif // USED_AS_MASTER
 
 
 #endif // __SASP_PROTOCOL_H__
