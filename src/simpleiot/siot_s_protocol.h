@@ -58,7 +58,7 @@ void handler_sasp_save_state( SASP_DATA* sasp_data, uint16_t storage_param );
 
 // handlers
 uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* packet_id, MEMORY_HANDLE mem_h, SASP_DATA* sasp_data, uint16_t storage_param );
-uint8_t handler_sasp_send( const uint8_t* key, const uint8_t* packet_id, MEMORY_HANDLE mem_h, SASP_DATA* sasp_data, uint16_t storage_param );
+uint8_t handler_sasp_send( const uint8_t* key, const uint8_t* packet_id, MEMORY_HANDLE mem_h, SASP_DATA* sasp_data );
 uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut, SASP_DATA* sasp_data, uint16_t storage_param );
 
 #else // USED_AS_MASTER

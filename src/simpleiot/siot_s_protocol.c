@@ -380,7 +380,7 @@ bool SASP_is_for_sasp( REQUEST_REPLY_HANDLE mem_h )
 }
 
 #ifdef USED_AS_MASTER
-uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE mem_h, SASP_DATA* sasp_data )
+uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE mem_h, SASP_DATA* sasp_data, uint16_t storage_param )
 #else // USED_AS_MASTER
 uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE mem_h )
 #endif // USED_AS_MASTER
@@ -443,7 +443,11 @@ uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE me
 			INCREMENT_COUNTER( 14, "handler_sasp_receive(), nonce las updated" );
 			ZEPTO_MEMCPY( nls, new_nls, SASP_NONCE_SIZE );
 //			sa_uint48_increment( sasp_data->nonce_ls );
-			SASP_increment_nonce_last_sent( sasp_data );
+#ifdef USED_AS_MASTER
+			SASP_increment_nonce_last_sent( sasp_data, storage_param );
+#else
+			SASP_increment_nonce_last_sent();
+#endif
 			// TODO: shuold we do anything else?
 			return SASP_RET_TO_HIGHER_LAST_SEND_FAILED;
 		}
@@ -474,7 +478,11 @@ uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE me
 //		uint8_t ne[ SASP_HEADER_SIZE ];
 //		ZEPTO_MEMCPY( ne, pid, SASP_NONCE_SIZE );
 		sa_uint48_t ne;
-		handler_sasp_get_packet_id( ne );
+#ifdef USED_AS_MASTER
+		handler_sasp_get_packet_id( ne, sasp_data, storage_param );
+#else
+			handler_sasp_get_packet_id( ne );
+#endif
 		SASP_EncryptAndAddAuthenticationData( mem_h, key, ne );
 		ZEPTO_DEBUG_PRINTF_1( "handler_sasp_receive(): ------------------- ERROR OLD NONCE WILL BE SENT ----------------------\n" );
 //		ZEPTO_DEBUG_ASSERT( ugly_hook_get_response_size( mem_h ) <= 39 );
@@ -493,12 +501,16 @@ uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE me
 }
 
 #ifdef USED_AS_MASTER
-uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut, SASP_DATA* sasp_data )
+uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut, SASP_DATA* sasp_data, uint16_t storage_param )
 #else // USED_AS_MASTER
 uint8_t handler_sasp_get_packet_id( sa_uint48_t buffOut )
 #endif // USED_AS_MASTER
  {
-	SASP_increment_nonce_last_sent( sasp_data );
+#ifdef USED_AS_MASTER
+	SASP_increment_nonce_last_sent( sasp_data, storage_param );
+#else
+	SASP_increment_nonce_last_sent();
+#endif
 	sa_uint48_init_by( buffOut, sasp_data->nonce_ls );
 	return SASP_RET_NONCE;
 }

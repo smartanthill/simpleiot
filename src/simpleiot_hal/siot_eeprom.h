@@ -45,7 +45,12 @@ uint8_t eeprom_check_reincarnation( uint8_t* rid ); // returns one of EEPROM_RET
 bool eeprom_check_at_start(); // returns true, if all slots are OK; TODO: it should be upper level logic to determine what to do with each corrupted slot separately
 void eeprom_update_reincarnation_if_necessary( uint8_t* rid );
 
+#ifdef USED_AS_MASTER
+void eeprom_write( uint8_t id, uint8_t* data, uint16_t param );
+void eeprom_read( uint8_t id, uint8_t* data, uint16_t param);
+#else // USED_AS_MASTER
 void eeprom_write( uint8_t id, uint8_t* data);
 void eeprom_read( uint8_t id, uint8_t* data);
+#endif // USED_AS_MASTER
 
 #endif // __SA_EEPROM_H__
