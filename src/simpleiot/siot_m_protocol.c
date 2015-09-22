@@ -878,6 +878,18 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 	zepto_parser_init( &po1, mem_h );
 	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
 
+#if 0//def SA_DEBUG
+	{
+		uint16_t i;
+		parser_obj podbg;
+		zepto_parser_init( &podbg, mem_h );
+		ZEPTO_DEBUG_PRINTF_2( "handler_siot_mesh_receive_packet(): packet received: sz = %d, packet = ", total_packet_sz );
+		for ( i=0; i<total_packet_sz; i++)
+			ZEPTO_DEBUG_PRINTF_2( "%02x ", zepto_parse_uint8( &podbg ) );
+		ZEPTO_DEBUG_PRINTF_1( "\n" );
+	}
+#endif // SA_DEBUG
+
 	*mesh_val = 0xFF; // valid values make sense only in certain cases and will be loaded then
 
 	uint16_t header = zepto_parse_encoded_uint16( &po );
@@ -1043,8 +1055,9 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 			}
 			default:
 			{
-				ZEPTO_DEBUG_PRINTF_2( "Error: packet type %d received; not expected or not implemented\n", (header >> 1) & 0x7 );
-				ZEPTO_DEBUG_ASSERT( NULL == "Error: processing of mesh packets of this type is not implemented\n" );
+				ZEPTO_DEBUG_PRINTF_2( "Packet type %d received; not expected or not implemented\n", (header >> 1) & 0x7 );
+//				ZEPTO_DEBUG_ASSERT( NULL == "Error: processing of mesh packets of this type is not implemented\n" );
+				return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				break;
 			}
 		}
