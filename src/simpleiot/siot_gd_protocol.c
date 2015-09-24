@@ -379,6 +379,8 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 			bool isreply = is_pid_in_range( enc_reply_to, sagdp_data->first_last_sent_packet_id, sagdp_data->next_last_sent_packet_id );
 			if ( !isreply )
 			{
+				if ( nonce == NULL )
+					return SAGDP_RET_NEED_NONCE;
 				INCREMENT_COUNTER( 26, "handler_sagdp_receive_up(), idle, too old, sys corrupted" );
 				// send an error message to a communication partner and reinitialize
 				zepto_write_uint8( mem_h, SAGDP_P_STATUS_ERROR_MSG );
@@ -469,7 +471,7 @@ uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonc
 
 	else if ( state == SAGDP_STATE_WAIT_REMOTE )
 	{
-		SAGDP_ASSERT_SEQUENCE_IN_PROGRESS;
+//		SAGDP_ASSERT_SEQUENCE_IN_PROGRESS;
 
 #ifdef USED_AS_MASTER
 		if ( ( packet_status & SAGDP_P_STATUS_MASK ) == SAGDP_P_STATUS_ERROR_MSG )
@@ -1332,7 +1334,7 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 				SAGDP_INIT_RESENT_SEQUENCE
 			}
 
-			sagdp_data->state = packet_status == SAGDP_P_STATUS_TERMINATING ? SAGDP_STATE_IDLE : SAGDP_STATE_WAIT_REMOTE;
+			sagdp_data->state = (packet_status & SAGDP_P_STATUS_MASK ) == SAGDP_P_STATUS_TERMINATING ? SAGDP_STATE_IDLE : SAGDP_STATE_WAIT_REMOTE;
 			INCREMENT_COUNTER( 74, "handler_sagdp_receive_hlp(), wait-remote, intermediate/terminating" );
 			INCREMENT_COUNTER_IF( 75, "handler_sagdp_receive_hlp(), wait-remote, terminating", (packet_status >> 1) );
 			return SAGDP_RET_TO_LOWER_NEW;
@@ -1340,11 +1342,11 @@ uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_non
 	}
 	else if ( state == SAGDP_STATE_WAIT_REMOTE )
 	{
-		if( sagdp_data->event_type != SAGDP_EV_NONE )
+/*		if( sagdp_data->event_type != SAGDP_EV_NONE )
 		{
 			sagdp_data->event_type = sagdp_data->event_type;
 		}
-		SAGDP_ASSERT_NO_SEQUENCE;
+//		SAGDP_ASSERT_NO_SEQUENCE;*/
 
 		if ( packet_status & SAGDP_P_STATUS_FIRST )
 		{
