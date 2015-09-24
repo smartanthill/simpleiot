@@ -571,7 +571,7 @@ uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t
 #endif // SA_DEBUG
 }
 
-uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
+uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h, uint16_t* recipient )
 {
 	uint8_t ret_code;
 	uint16_t flags = 0;
@@ -586,7 +586,7 @@ uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h )
 	zepto_write_uint8( mem_h, 0 );
 	zepto_write_uint8( mem_h, 0 );
 
-	ret_code = siot_mesh_at_root_load_update_to_packet( mem_h );
+	ret_code = siot_mesh_at_root_load_update_to_packet( mem_h, recipient );
 	if ( ret_code != SIOT_MESH_RET_OK )
 		return ret_code;
 
@@ -613,7 +613,7 @@ void handler_siot_mesh_process_route_update_response( uint16_t source_dev_id, ME
 	}
 }
 
-uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h )
+uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* device_id )
 {
 	// WARNING: this development is just in the middle ... don't be surprized ...
 	// NOTE: there are a number of things that can be done by timer; on this development stage we assume that they happen somehow in the order as implemented
@@ -624,14 +624,14 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	static bool route_table_created = false;
 	static bool hop_data_added = false;
 	uint8_t ret_code;
+	uint16_t target_id;
 //	if ( !hop_data_added )
 	{
-		uint16_t target_id = 1;
 		uint16_t bus_id_at_target;
 		uint16_t id_from;
 		uint16_t bus_id_at_prev;
 		uint16_t id_next;
-		uint8_t ret_code = siot_mesh_at_root_find_best_route( target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
+		uint8_t ret_code = siot_mesh_at_root_find_best_route( &target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
 		if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
 		{
 			siot_mesh_at_root_remove_last_hop_data( target_id );
@@ -641,10 +641,11 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	}
 //	if ( !route_table_created )
 	{
-		ret_code = handler_siot_mesh_prepare_route_update( mem_h );
+		ret_code = handler_siot_mesh_prepare_route_update( mem_h, &target_id );
 		if ( ret_code == SIOT_MESH_RET_OK )
 		{
 			route_table_created = true;
+			*device_id = target_id;
 			return SIOT_MESH_RET_PASS_TO_CCP;
 		}
 		else
@@ -787,10 +788,13 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint16_t* src_id,
 		bool guaranteed_delivery = ( header >> 1 ) & 0x1;;
 		bool backward_guaranteed_delivery = ( header >> 2 ) & 0x1;
 		bool extra_headers_present = ( header >> 3 ) & 0x1;
-		bool direction_flag = ( header >> 3 ) & 0x1;
+		bool direction_flag = ( header >> 4 ) & 0x1;
 
 		if ( direction_flag )
+		{
+			ZEPTO_DEBUG_PRINTF_1( "Packet directed from ROOT received; ignored\n" );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
+		}
 		// uint16_t TTL = header >> 5;
 		// now we're done with the header; proceeding to optional headers...
 		while ( extra_headers_present )
@@ -878,7 +882,7 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 	zepto_parser_init( &po1, mem_h );
 	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
 
-#if 0//def SA_DEBUG
+#ifdef SA_DEBUG
 	{
 		uint16_t i;
 		parser_obj podbg;
@@ -973,9 +977,11 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 				header = zepto_parse_encoded_uint16( &po );
 				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
 				uint16_t target_id = header >> 1;
-				// TODO: compare with self-id
 				if ( target_id != DEVICE_SELF_ID )
+				{
+					ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (from Santa); ignored (self id: %d)\n", target_id, DEVICE_SELF_ID );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
+				}
 
 				// OPTIONAL-TARGET-REPLY-DELAY
 
@@ -1079,10 +1085,13 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 		bool guaranteed_delivery = ( header >> 1 ) & 0x1;;
 		bool backward_guaranteed_delivery = ( header >> 2 ) & 0x1;
 		bool extra_headers_present = ( header >> 3 ) & 0x1;
-		bool direction_flag = ( header >> 3 ) & 0x1;
+		bool direction_flag = ( header >> 4 ) & 0x1;
 
-		if ( direction_flag )
+		if ( !direction_flag )
+		{
+			ZEPTO_DEBUG_PRINTF_1( "Packet directed to ROOT received; ignored\n" );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
+		}
 		// uint16_t TTL = header >> 5;
 		// now we're done with the header; proceeding to optional headers...
 		while ( extra_headers_present )
@@ -1115,6 +1124,7 @@ uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, uint8_t* mesh_val
 		if ( src_id != DEVICE_SELF_ID )
 		{
 			// TODO: it is much more complicated in case of retransmitter
+			ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (unicast); ignored (self id: %d)\n", src_id, DEVICE_SELF_ID );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 		}
 
@@ -1330,6 +1340,7 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 		checksum_before_read |= ((uint16_t)zepto_parse_uint8( po )) << 8;
 		if ( checksum_before_read != checksum_before_calc )
 		{
+			ZEPTO_DEBUG_PRINTF_3( "Bad route table checksum: claimed 0x%04x, calculated: 0x%04x\n", checksum_before_read, checksum_before_calc );
 			ZEPTO_DEBUG_ASSERT( 0 == "Reporting Bad route table checksum is not yet implemented" );
 			return;
 		}
