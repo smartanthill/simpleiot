@@ -80,10 +80,10 @@ typedef struct _SAGDP_DATA
 
 // handlers
 void sagdp_init( SAGDP_DATA* sagdp_data );
-uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
-uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
-uint8_t handler_sagdp_receive_request_resend_lsp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
-uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
+uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
+uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
+uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
+uint8_t handler_sagdp_receive_hlp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data );
 bool handler_sagdp_is_up_packet_ctr( REQUEST_REPLY_HANDLE mem_h );
 
 #endif // __SAGDP_PROTOCOL_H__

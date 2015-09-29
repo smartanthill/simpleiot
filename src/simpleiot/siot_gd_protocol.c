@@ -129,7 +129,7 @@ void sagdp_init( SAGDP_DATA* sagdp_data )
 
 
 
-uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	uint8_t state = sagdp_data->state;
 	if ( state == SAGDP_STATE_WAIT_REMOTE )
@@ -181,7 +181,7 @@ uint8_t handler_sagdp_timer( sa_time_val* currt, waiting_for* wf, sasp_nonce_typ
 	}
 }
 
-uint8_t handler_sagdp_receive_up( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP():           pid: %x%x%x%x%x%x\n", pid[0], pid[1], pid[2], pid[3], pid[4], pid[5] );
 
@@ -1048,7 +1048,7 @@ bool handler_sagdp_is_up_packet_ctr( REQUEST_REPLY_HANDLE mem_h )
 	return packet_status & SAGDP_P_STATUS_IS_CONTROL;
 }
 
-uint8_t handler_sagdp_receive_request_resend_lsp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	// SAGDP can legitimately receive a repeated packet in wait-remote state (the other side sounds like "we have not received anything from you; please resend, only then we will probably send you something new")
 	// LSP must be resent
@@ -1127,7 +1127,7 @@ uint8_t handler_sagdp_receive_request_resend_lsp( sa_time_val* currt, waiting_fo
 	}
 }
 
-uint8_t handler_sagdp_receive_hlp( sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_hlp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
 {
 	// It is a responsibility of a higher level to report the status of a packet.
 	//
