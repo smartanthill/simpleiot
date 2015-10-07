@@ -129,7 +129,7 @@ void sagdp_init( SAGDP_DATA* sagdp_data )
 
 
 
-uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data, uint8_t* resend_cnt )
 {
 	uint8_t state = sagdp_data->state;
 	if ( state == SAGDP_STATE_WAIT_REMOTE )
@@ -166,6 +166,7 @@ uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_non
 				zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM, mem_h );
 				zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, mem_h_addr );
 				ZEPTO_DEBUG_ASSERT( sagdp_data->state == SAGDP_STATE_WAIT_REMOTE );
+				*resend_cnt = sagdp_data->resent_ordinal;
 				return SAGDP_RET_TO_LOWER_REPEATED;
 			}
 		}
@@ -181,7 +182,7 @@ uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_non
 	}
 }
 
-uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, uint8_t* pid, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data, uint8_t* resend_cnt )
 {
 	ZEPTO_DEBUG_PRINTF_7( "handlerSAGDP_receiveNewUP():           pid: %x%x%x%x%x%x\n", pid[0], pid[1], pid[2], pid[3], pid[4], pid[5] );
 
@@ -271,6 +272,7 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 					// TODO: should we reply with the old address?
 //					zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, mem_h_addr );
 					// SAGDP status remains the same
+					*resend_cnt = sagdp_data->resent_ordinal;
 					return SAGDP_RET_TO_LOWER_REPEATED;
 				}
 				else
@@ -357,6 +359,7 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 					// reply is with a new address; new address is not stored as the lsm was terminating and is not supposed to be resent by timeout
 					SAGDP_ASSERT_NO_SEQUENCE
 					SAGDP_REGISTER_SUBSEQUENT_RESENT
+					*resend_cnt = sagdp_data->resent_ordinal;
 					return SAGDP_RET_TO_LOWER_REPEATED;
 				}
 				else
@@ -446,6 +449,7 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 				SAGDP_ASSERT_NO_SEQUENCE
 				//SAGDP_REGISTER_SUBSEQUENT_RESENT
 				// SAGDP status remains the same
+				*resend_cnt = sagdp_data->resent_ordinal;
 				return SAGDP_RET_TO_LOWER_REPEATED;
 			}
 			else
@@ -540,6 +544,7 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 				SAGDP_REGISTER_SUBSEQUENT_RESENT
 				// TODO: think about going back to minimal timeout
 
+				*resend_cnt = sagdp_data->resent_ordinal;
 				return SAGDP_RET_TO_LOWER_REPEATED;
 			}
 			else
@@ -596,6 +601,7 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 
 
 					sagdp_data->state = SAGDP_STATE_WAIT_REMOTE; // note that PID can be changed!
+					*resend_cnt = sagdp_data->resent_ordinal;
 					return SAGDP_RET_TO_LOWER_REPEATED;
 				}
 				else*/
@@ -684,6 +690,7 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 
 /*				SAGDP_REGISTER_SUBSEQUENT_RESENT
 				// TODO: think about going back to minimal timeout
+				*resend_cnt = sagdp_data->resent_ordinal;
 				return SAGDP_RET_TO_LOWER_REPEATED;*/
 
 				// we send nothing here; sending will be done by timeout
@@ -752,6 +759,7 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 					/*SAGDP_REGISTER_SUBSEQUENT_RESENT
 					// TODO: think about going back to minimal timeout
 					sagdp_data->state = SAGDP_STATE_WAIT_REMOTE; // note that PID can be changed!
+					*resend_cnt = sagdp_data->resent_ordinal;
 					return SAGDP_RET_TO_LOWER_REPEATED;*/
 
 					// we send nothing here; sending will be done by timeout
@@ -1048,7 +1056,7 @@ bool handler_sagdp_is_up_packet_ctr( REQUEST_REPLY_HANDLE mem_h )
 	return packet_status & SAGDP_P_STATUS_IS_CONTROL;
 }
 
-uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data, uint8_t* resend_cnt )
 {
 	// SAGDP can legitimately receive a repeated packet in wait-remote state (the other side sounds like "we have not received anything from you; please resend, only then we will probably send you something new")
 	// LSP must be resent
@@ -1086,6 +1094,7 @@ uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, wait
 		zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM, mem_h );
 		zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, mem_h_addr );
 		sagdp_data->state = SAGDP_STATE_WAIT_REMOTE; // note that PID can be changed!
+		*resend_cnt = sagdp_data->resent_ordinal;
 		return SAGDP_RET_TO_LOWER_REPEATED;
 	}
 	if ( state == SAGDP_STATE_IDLE )
@@ -1111,6 +1120,7 @@ uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, wait
 		zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM, mem_h );
 		zepto_copy_request_to_response_of_another_handle( MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, mem_h_addr );
 		sagdp_data->state = SAGDP_STATE_IDLE; // note that PID can be changed!
+		*resend_cnt = sagdp_data->resent_ordinal;
 		return SAGDP_RET_TO_LOWER_REPEATED;
 	}
 	else // invalid states

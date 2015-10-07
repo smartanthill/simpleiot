@@ -32,6 +32,8 @@ Copyright (C) 2015 OLogN Technologies AG
 #define EEPROM_SLOT_MAX 2
 // ...to be continued
 
+#define EEPROM_SERIALIZED_SIZE ( 2 + DATA_REINCARNATION_ID_SIZE + 2 * EEPROM_SLOT_MAX + DATA_SASP_NONCE_LW_SIZE + DATA_SASP_NONCE_LS_SIZE )
+
 // ret codes
 #define EEPROM_RET_REINCARNATION_ID_OLD 0
 #define EEPROM_RET_REINCARNATION_ID_OK_ONE_OK 1
@@ -41,6 +43,7 @@ Copyright (C) 2015 OLogN Technologies AG
 // calls
 bool init_eeprom_access();
 
+
 uint8_t eeprom_check_reincarnation( uint8_t* rid ); // returns one of EEPROM_RET_REINCARNATION_ID_XXX
 bool eeprom_check_at_start(); // returns true, if all slots are OK; TODO: it should be upper level logic to determine what to do with each corrupted slot separately
 void eeprom_update_reincarnation_if_necessary( uint8_t* rid );
@@ -48,9 +51,13 @@ void eeprom_update_reincarnation_if_necessary( uint8_t* rid );
 #ifdef USED_AS_MASTER
 void eeprom_write( uint8_t id, uint8_t* data, uint16_t param );
 void eeprom_read( uint8_t id, uint8_t* data, uint16_t param);
+uint16_t eeprom_serialize( uint8_t* buff );
+void eeprom_deserialize( uint8_t* buff, uint16_t sz );
 #else // USED_AS_MASTER
 void eeprom_write( uint8_t id, uint8_t* data);
 void eeprom_read( uint8_t id, uint8_t* data);
+uint16_t eeprom_serialize( uint8_t* buff );
+void eeprom_deserialize( uint8_t* buff );
 #endif // USED_AS_MASTER
 
 #endif // __SA_EEPROM_H__
