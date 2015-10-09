@@ -38,7 +38,8 @@ Copyright (C) 2015 OLogN Technologies AG
 #define MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR_BASE 34
 //#define MEMORY_HANDLE_ADDITIONAL_ANSWER 44
 
-#define MEMORY_HANDLE_SECOND_PART_START 45
+#define MEMORY_HANDLE_MESH_ACK 45
+#define MEMORY_HANDLE_SECOND_PART_START 46
 
 #else // USED_AS_MASTER
 
@@ -51,8 +52,11 @@ Copyright (C) 2015 OLogN Technologies AG
 #define MEMORY_HANDLE_SAGDP_LSM_CTR 6
 #define MEMORY_HANDLE_SAGDP_LSM_CTR_SAOUDP_ADDR 7
 #define MEMORY_HANDLE_ADDITIONAL_ANSWER 8
+#define MEMORY_HANDLE_MESH_1 9
+#define MEMORY_HANDLE_MESH_2 10
+#define MEMORY_HANDLE_MESH_ACK 11
 
-#define MEMORY_HANDLE_SECOND_PART_START 9
+#define MEMORY_HANDLE_SECOND_PART_START 12
 
 #endif // USED_AS_MASTER
 
@@ -91,6 +95,10 @@ uint16_t ugly_hook_get_response_size( REQUEST_REPLY_HANDLE mem_h );
 
 
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void zepto_mem_man_init_memory_management();
 
 
@@ -102,10 +110,6 @@ bool zepto_parse_read_block( parser_obj* po, uint8_t* block, uint16_t size );
 bool zepto_parse_skip_block( parser_obj* po, uint16_t size );
 bool zepto_is_parsing_done( parser_obj* po );
 uint16_t zepto_parsing_remaining_bytes( parser_obj* po );
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // writing functions
 void zepto_write_uint8( REQUEST_REPLY_HANDLE mem_h, uint8_t val );
