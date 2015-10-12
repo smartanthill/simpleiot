@@ -100,7 +100,7 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint8_t conn_quality, uint8_t error_cnt );
 uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint16_t target_id, MEMORY_HANDLE mem_h, uint8_t resend_cnt, uint16_t* link_id );
-uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* device_id );
+uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* device_id, uint16_t* link_id );
 void handler_siot_mesh_process_route_update_response(  uint16_t source_dev_id, MEMORY_HANDLE mem_h );
 
 #ifdef __cplusplus
@@ -113,6 +113,12 @@ extern "C" {
 #define SIOT_MESH_AT_ROOT_RET_NOT_FOUND 3
 #define SIOT_MESH_AT_ROOT_RET_NO_UPDATES 4
 #define SIOT_MESH_AT_ROOT_RET_NO_READY_UPDATES 5
+// ret codes for siot_mesh_at_root_get_resend_task
+#define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NONE_EXISTS 6
+#define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NOT_NOW 7
+#define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM 8
+#define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL 9
+
 
 void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
@@ -125,6 +131,7 @@ uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h, uint16_t* 
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id );
 uint8_t siot_mesh_get_link( uint16_t device_id, uint16_t link_id, SIOT_MESH_LINK* link );
 void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event );
+uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, sa_time_val* time_to_next_event );
 
 
 #ifdef __cplusplus

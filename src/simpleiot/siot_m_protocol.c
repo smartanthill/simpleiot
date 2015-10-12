@@ -691,7 +691,7 @@ void handler_siot_mesh_process_route_update_response( uint16_t source_dev_id, ME
 	}
 }
 
-uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* device_id )
+uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* device_id, uint16_t* link_id )
 {
 	// WARNING: this development is just in the middle ... don't be surprized ...
 	// NOTE: there are a number of things that can be done by timer; on this development stage we assume that they happen somehow in the order as implemented
@@ -699,45 +699,30 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 
 	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
 
-#if 0
-	uint8_t i;
-	bool time_still_remains;
-	ZEPTO_DEBUG_ASSERT( memory_object_get_request_size( mem_h ) == 0 );
-	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
-	for ( i=0; i<PENDING_RESENDS_MAX; i++ )
-		if ( pending_resends[i].resend_cnt ) // used slot
+	uint8_t ret_code = siot_mesh_at_root_get_resend_task( mem_h, currt, device_id, &(wf->wait_time) );
+	switch (ret_code )
+	{
+		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NONE_EXISTS:
+		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NOT_NOW:
+			break;
+		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM:
 		{
-			time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(pending_resends[i].next_resend_time), &(wf->wait_time) );
-			if ( time_still_remains ) // it's not a time for resending; just let themm know, when to wake us up basedcurrent schedule on 
-			{
-				// time difference (time to wait) is already loaded
-				continue;
-			}
-			else // time to resend; schedule new resend event and report wake time based on that new scheduling
-			{
-				zepto_copy_request_to_response_of_another_handle( pending_resends[i].packet_h, mem_h ); // create our own copy
-				zepto_response_to_request( mem_h );
-				if ( pending_resends[i].resend_cnt > 1 )
-				{
-					uint16_t checksum;
-					siot_mesh_form_unicast_packet( mem_h, *link_id, pending_resends[i].target_id, true, &checksum );
-					ZEPTO_DEBUG_ASSERT( checksum == pending_resends[i].checksum );
-					sa_time_val diff_tval;
-					TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
-					sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &diff_tval );
-					sa_hal_time_val_copy_from( &(pending_resends[i].next_resend_time), currt );
-					SA_TIME_INCREMENT_BY_TICKS( pending_resends[i].next_resend_time, diff_tval );
-				}
-				else
-					siot_mesh_form_packet_to_santa( mem_h, 0xFF, pending_resends[i].target_id );
-				(pending_resends[i].resend_cnt)--;
-				return SIOT_MESH_RET_PASS_TO_SEND;
-			}
+			uint16_t checksum;
+			siot_mesh_form_unicast_packet( *device_id, mem_h, *link_id, true, &checksum );
+			return SIOT_MESH_RET_PASS_TO_SEND;
+			break;
 		}
-#endif // 0
+		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL:
+		{
+			uint16_t bus_id_to_use = 0;
+			siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
+			return SIOT_MESH_RET_PASS_TO_SEND;
+			break;
+		}
+	}
+
 	static bool route_table_created = false;
 	static bool hop_data_added = false;
-	uint8_t ret_code;
 	uint16_t target_id;
 //	if ( !hop_data_added )
 	{
@@ -767,12 +752,6 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	}
 		
 	return SIOT_MESH_RET_OK;
-}
-
-uint8_t handler_siot_mesh_receive_unicast_packet( MEMORY_HANDLE mem_h )
-{
-	//  | SAMP-UNICAST-DATA-PACKET-FLAGS-AND-TTL | OPTIONAL-EXTRA-HEADERS | NEXT-HOP | LAST-HOP | Target-Address | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
-	return 0;
 }
 
 uint8_t handler_siot_mesh_receive_packet( MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint8_t conn_quality, uint8_t error_cnt )
