@@ -86,7 +86,7 @@ void sagdp_init( SAGDP_DATA* sagdp_data )
 		if (sec_pow > SAGDP_LTO_POW_MAX) sec_pow = SAGDP_LTO_POW_MAX; \
 		SA_TIME_LOAD_TICKS_FOR_1_SEC( diff_tval ); \
 		SA_TIME_MUL_TICKS_BY_2( diff_tval ) \
-		uint8_t i; for ( i=0; i<=sec_pow; i++) SA_TIME_MUL_TICKS_BY_1_AND_A_HALF( diff_tval ) \
+		uint8_t i; for ( i=0; i<sec_pow; i++) SA_TIME_MUL_TICKS_BY_1_AND_A_HALF( diff_tval ) \
 		SA_TIME_INCREMENT_BY_TICKS( curr_tval, diff_tval ) \
 	}
 
@@ -108,16 +108,19 @@ void sagdp_init( SAGDP_DATA* sagdp_data )
 
 
 #define SAGDP_REGISTER_SUBSEQUENT_RESENT \
+	sa_time_val diff_tval; \
+	sa_hal_time_val_copy_from( &(sagdp_data->next_event_time), currt ); \
+	SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( sagdp_data->next_event_time, diff_tval, sagdp_data->resent_ordinal ) \
 	(sagdp_data->resent_ordinal) ++; \
-	sa_hal_time_val_copy_from( &(sagdp_data->next_event_time), currt );
+	sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &diff_tval );
 
 
 #define SAGDP_REGISTER_SUBSEQUENT_RESENT_AND_RESET_TIMEOUT \
 	sa_time_val diff_tval; \
-	(sagdp_data->resent_ordinal) ++; \
 	ZEPTO_DEBUG_ASSERT( sagdp_data->last_timeout != 0 ); \
 	sa_hal_time_val_copy_from( &(sagdp_data->next_event_time), currt ); \
 	SAGDP_LTO_INCREMENT_BY_CAPPED_EXP_SEC( sagdp_data->next_event_time, diff_tval, sagdp_data->resent_ordinal ) \
+	(sagdp_data->resent_ordinal) ++; \
 	sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &diff_tval );
 
 #define SAGDP_ASSERT_NO_SEQUENCE \
@@ -132,17 +135,18 @@ void sagdp_init( SAGDP_DATA* sagdp_data )
 uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data, uint8_t* resend_cnt )
 {
 	uint8_t state = sagdp_data->state;
+	sa_time_val remaining;
 	if ( state == SAGDP_STATE_WAIT_REMOTE )
 	{
 		INCREMENT_COUNTER( 20, "handlerSAGDP_timer(), packet resent" );
 
 		if ( sagdp_data->event_type == SAGDP_EV_RESEND_LSP ) // there is something to resend
 		{
-			bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(sagdp_data->next_event_time), &(wf->wait_time) );
+			bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(sagdp_data->next_event_time), &remaining );
 
 			if ( time_still_remains ) // it's not a time for resending; just let themm know, when to wake us up basedcurrent schedule on 
 			{
-				// time difference (time to wait) is already loaded
+				sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &remaining );
 				return SAGDP_RET_OK;
 			}
 			else // time to resend; schedule new resend event and report wake time based on that new scheduling
