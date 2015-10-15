@@ -133,7 +133,8 @@ uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h, uint16_t* 
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id );
 void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event );
 uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, sa_time_val* time_to_next_event );
-void siot_mesh_at_root_remove_resend_task( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event );
+void siot_mesh_at_root_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event );
+void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, const sa_time_val* currt, sa_time_val* time_to_next_event );
 
 #ifdef __cplusplus
 }

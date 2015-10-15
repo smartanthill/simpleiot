@@ -710,13 +710,23 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM:
 		{
 			uint16_t checksum;
-			siot_mesh_form_unicast_packet( *device_id, mem_h, *link_id, true, &checksum );
+			bool route_known = siot_mesh_at_root_target_to_link_id( *device_id, link_id ) == SIOT_MESH_RET_OK;
+			if ( route_known )
+			{
+				siot_mesh_form_unicast_packet( *device_id, mem_h, *link_id, true, &checksum );
+			}
+			else
+			{
+				siot_mesh_at_root_remove_resend_task_by_device_id( *device_id, currt, &(wf->wait_time) );
+				uint16_t bus_id_to_use = 0;
+				siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
+			}
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL:
 		{
-//			siot_mesh_at_root_remove_link_to_target( *device_id );
+			siot_mesh_at_root_remove_link_to_target( *device_id );
 			uint16_t bus_id_to_use = 0;
 			siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
 			return SIOT_MESH_RET_PASS_TO_SEND;
@@ -835,7 +845,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					// OPTIONAL-DELAY-LEFT
 				}
 
-				siot_mesh_at_root_remove_resend_task( checksum, currt, &(wf->wait_time) );
+				siot_mesh_at_root_remove_resend_task_by_hash( checksum, currt, &(wf->wait_time) );
 
 				return SIOT_MESH_RET_OK;
 			}
@@ -1624,7 +1634,9 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			{
 				zepto_copy_request_to_response_of_another_handle( pending_resends[oldest_index].packet_h, mem_h ); // create our own copy
 				zepto_response_to_request( mem_h );
-				if ( pending_resends[oldest_index].resend_cnt > 1 )
+				bool is_last = pending_resends[oldest_index].resend_cnt > 1;
+				bool route_known = siot_mesh_target_to_link_id( pending_resends[oldest_index].target_id, link_id ) == SIOT_MESH_RET_OK;
+				if ( (!is_last) && route_known )
 				{
 					uint16_t checksum;
 					siot_mesh_form_unicast_packet( mem_h, *link_id, pending_resends[oldest_index].target_id, true, &checksum );
@@ -1634,22 +1646,24 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 //					sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &diff_tval );
 					sa_hal_time_val_copy_from( &(pending_resends[oldest_index].next_resend_time), currt );
 					SA_TIME_INCREMENT_BY_TICKS( pending_resends[oldest_index].next_resend_time, diff_tval );
+					(pending_resends[oldest_index].resend_cnt)--;
 					ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): packet is abuot to be sent as unicast (resent cnt = %d, shecksum = %04x)  ###########\n", pending_resends[oldest_index].resend_cnt, checksum );
 				}
 				else
 				{
-					uint16_t link_id;
-					if ( siot_mesh_target_to_link_id( 0, &link_id ) == SIOT_MESH_RET_OK )
-						siot_mesh_remove_link( link_id );
-					siot_mesh_delete_route( 0 );
+					if ( is_last )
+					{
+						if ( siot_mesh_target_to_link_id( 0, link_id ) == SIOT_MESH_RET_OK )
+							siot_mesh_remove_link( *link_id );
+						siot_mesh_delete_route( 0 );
+					}
 					siot_mesh_form_packet_to_santa( mem_h, 0xFF, pending_resends[oldest_index].target_id );
+					pending_resends[oldest_index].resend_cnt = 0;
 					ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): packet is abuot to be sent as \'to santa\' (resent cnt = %d, shecksum = %04x)  ###########\n", pending_resends[oldest_index].resend_cnt, pending_resends[oldest_index].checksum );
 				}
-				(pending_resends[oldest_index].resend_cnt)--;
 				if ( pending_resends[oldest_index].resend_cnt == 0 )
-				{
 					zepto_parser_free_memory( pending_resends[oldest_index].packet_h );
-				}
+
 				packet_ready = true;
 			}
 	}
@@ -1767,7 +1781,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 	{
 		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
 
-		// packet "from Santa" will be sent... let's form a packet
+		// TODO: what link to use????
 		siot_mesh_form_packet_to_santa( mem_h, mesh_val, target_id );
 	}
 
