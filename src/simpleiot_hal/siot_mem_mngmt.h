@@ -24,6 +24,10 @@ Copyright (C) 2015 OLogN Technologies AG
 #define PLAIN_REPLY_FRAME
 #endif
 
+#ifdef USED_AS_RETRANSMITTER
+#define MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#endif
+
 // named memory handles
 #ifdef USED_AS_MASTER
 
@@ -42,6 +46,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #define MEMORY_HANDLE_SECOND_PART_START 46
 
 #else // USED_AS_MASTER
+//#define MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 
 #define MEMORY_HANDLE_MAIN_LOOP_1 0
 #define MEMORY_HANDLE_MAIN_LOOP_2 1
@@ -55,7 +60,6 @@ Copyright (C) 2015 OLogN Technologies AG
 #define MEMORY_HANDLE_MESH_1 9
 #define MEMORY_HANDLE_MESH_2 10
 #define MEMORY_HANDLE_MESH_ACK 11
-
 #define MEMORY_HANDLE_SECOND_PART_START 12
 
 #endif // USED_AS_MASTER
@@ -65,20 +69,27 @@ Copyright (C) 2015 OLogN Technologies AG
 #ifdef SA_DEBUG
 #define MEMORY_HANDLE_TEST_SUPPORT (MEMORY_HANDLE_SECOND_PART_START + 1)
 #define MEMORY_HANDLE_DBG_TMP (MEMORY_HANDLE_SECOND_PART_START + 2)
-#define MEMORY_HANDLE_MAX (MEMORY_HANDLE_SECOND_PART_START + 3) // TODO: keep updated!!!
+#define MEMORY_HANDLE_MAX_PREDEFINED (MEMORY_HANDLE_SECOND_PART_START + 3) // TODO: keep updated!!!
 #else
-#define MEMORY_HANDLE_MAX (MEMORY_HANDLE_SECOND_PART_START + 1) // TODO: keep updated!!!
+#define MEMORY_HANDLE_MAX_PREDEFINED (MEMORY_HANDLE_SECOND_PART_START + 1) // TODO: keep updated!!!
 #endif
 #else
 #ifdef SA_DEBUG
 #define MEMORY_HANDLE_TEST_SUPPORT MEMORY_HANDLE_SECOND_PART_START
 #define MEMORY_HANDLE_DBG_TMP (MEMORY_HANDLE_SECOND_PART_START + 1)
-#define MEMORY_HANDLE_MAX (MEMORY_HANDLE_SECOND_PART_START + 2) // TODO: keep updated!!!
+#define MEMORY_HANDLE_MAX_PREDEFINED (MEMORY_HANDLE_SECOND_PART_START + 2) // TODO: keep updated!!!
 #else
-#define MEMORY_HANDLE_MAX MEMORY_HANDLE_SECOND_PART_START // TODO: keep updated!!!
+#define MEMORY_HANDLE_MAX_PREDEFINED MEMORY_HANDLE_SECOND_PART_START // TODO: keep updated!!!
 #endif
 #endif // PLAIN_REPLY_FRAME
 
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+#define MEMORY_HANDLE_ACQUIRABLE_HANDLE_STORAGE MEMORY_HANDLE_MAX_PREDEFINED
+#define MEMORY_HANDLE_MAX (MEMORY_HANDLE_MAX_PREDEFINED + 1)
+#define MEMORY_HANDLE_ACQUIRABLE_START MEMORY_HANDLE_MAX
+#else
+#define MEMORY_HANDLE_MAX MEMORY_HANDLE_MAX_PREDEFINED
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 
 
 
@@ -167,6 +178,14 @@ void zepto_parser_encode_and_prepend_uint( MEMORY_HANDLE mem_h, const uint8_t* n
 uint16_t memory_object_get_request_size( REQUEST_REPLY_HANDLE mem_h );
 uint16_t memory_object_get_response_size( REQUEST_REPLY_HANDLE mem_h );
 uint8_t memory_object_read_response_byte( REQUEST_REPLY_HANDLE mem_h, uint16_t offset );
+
+#ifdef MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
+MEMORY_HANDLE acquire_memory_handle();
+void release_memory_handle( MEMORY_HANDLE mem_h );
+#else
+#define acquire_memory_handle() ZEPTO_DEBUG_ASSERT( 0 == "acquire_memory_handle() is not implemented in this configuration" )
+#define release_memory_handle(x) ZEPTO_DEBUG_ASSERT( 0 == "release_memory_handle() is not implemented in this configuration" )
+#endif // MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 
 #ifdef __cplusplus
 }
