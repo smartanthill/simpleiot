@@ -66,13 +66,19 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 
 #else // USED_AS_MASTER
 
-#ifdef SA_RETRANSMITTER
+typedef struct _MESH_PENDING_RESENDS
+{
+	MEMORY_HANDLE packet_h;
+	uint8_t resend_cnt;
+	sa_time_val next_resend_time;
+	uint16_t checksum;
+	uint16_t target_id; // TODO: for a terminating device it is always 0 (rooot), right? - subject for optimization
+} MESH_PENDING_RESENDS;
+
+#ifdef USED_AS_RETRANSMITTER
+
 #define SIOT_MESH_LINK_TABLE_SIZE_MAX 256
 #define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 256
-#else
-#define SIOT_MESH_LINK_TABLE_SIZE_MAX 1
-#define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 1
-#endif
 
 uint8_t siot_mesh_link_table_size;
 static SIOT_MESH_LINK siot_mesh_link_table[ SIOT_MESH_LINK_TABLE_SIZE_MAX ];
@@ -80,122 +86,10 @@ uint8_t siot_mesh_route_table_size;
 static SIOT_MESH_ROUTE siot_mesh_route_table[ SIOT_MESH_ROUTE_TABLE_SIZE_MAX ];
 static SIOT_MESH_RETRANSM_COMMON_DATA siot_mesh_retransm_common_data;
 
-typedef struct _MESH_PENDING_RESENDS
-{
-	MEMORY_HANDLE packet_h;
-	uint8_t resend_cnt;
-	sa_time_val next_resend_time;
-	uint16_t checksum;
-	uint8_t target_id; // TODO: for a terminating device it is always 0 (rooot), right? - subject for optimization
-} MESH_PENDING_RESENDS;
-
-// TODO: think about retransmitter
-#define PENDING_RESENDS_MAX 2 // WARNING: if changes, have more handles (at least, potentially)!
-MESH_PENDING_RESENDS pending_resends[PENDING_RESENDS_MAX] = { {MEMORY_HANDLE_MESH_1, 0}, { MEMORY_HANDLE_MESH_2, 0} };
-
 void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
 {
 	siot_mesh_route_table_size = 0;
 	siot_mesh_link_table_size = 0;
-}
-
-#define SIOT_MESH_LAST_HOP_DATA_MAX 4
-
-static SIOT_MESH_LAST_HOP_DATA _last_hops_0[ SIOT_MESH_LAST_HOP_DATA_MAX ];
-static SIOT_MESH_LAST_HOP_DATA _last_hops_1[ SIOT_MESH_LAST_HOP_DATA_MAX ];
-
-typedef struct _SIOT_MESH_LAST_REQUEST
-{
-	uint16_t rq_id;
-//	MEMORY_HANDLE hop_list;
-	SIOT_MESH_LAST_HOP_DATA* hop_list;
-	uint8_t hop_list_sz;
-	bool ineffect;
-} SIOT_MESH_LAST_REQUEST;
-
-static SIOT_MESH_LAST_REQUEST last_requests[2] = 
-{
-	{0xFFFF, _last_hops_0, 0, false},
-	{0xFFFF, _last_hops_1, 0, false},
-};
-
-//static uint16_t last_rq_id;
-
-#define SIOT_MESH_QUALITY_OF_FIRST_IS_BETTER( a, b ) (a) < (b)
-
-void siot_mesh_add_last_hop_data( uint8_t slot_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
-{
-	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
-	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
-	// we keep this array sorted in order of packets (with the same request id
-	if ( last_requests[slot_id].hop_list_sz < SIOT_MESH_LAST_HOP_DATA_MAX )
-	{
-		last_hops[last_requests[slot_id].hop_list_sz].last_hop_id = last_hop_id;
-		last_hops[last_requests[slot_id].hop_list_sz].last_hop_bus_id = last_hop_bus_id;
-		last_hops[last_requests[slot_id].hop_list_sz].conn_quality = conn_q;
-		(last_requests[slot_id].hop_list_sz)++;
-	}
-	else
-	{
-		ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz == SIOT_MESH_LAST_HOP_DATA_MAX );
-		uint8_t i;
-		uint8_t worst = 0;
-		for ( i=1; i<SIOT_MESH_LAST_HOP_DATA_MAX; i++)
-			if ( ! SIOT_MESH_QUALITY_OF_FIRST_IS_BETTER( last_hops[ i ].conn_quality, last_hops[ worst ].conn_quality ) )
-				worst = i;
-		if ( SIOT_MESH_QUALITY_OF_FIRST_IS_BETTER( conn_q, last_hops[ worst ].conn_quality ) )
-		{
-			ZEPTO_MEMMOV( last_hops + worst, last_hops + worst + 1, ( SIOT_MESH_LAST_HOP_DATA_MAX - worst - 1 ) * sizeof( SIOT_MESH_LAST_HOP_DATA ) );
-			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].last_hop_id = last_hop_id;
-			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].last_hop_bus_id = last_hop_bus_id;
-			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].conn_quality = conn_q;
-		}
-	}
-}
-
-void siot_mesh_init_last_hop_data_storage( uint8_t slot_id, uint16_t request_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
-{
-	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
-	last_requests[slot_id].hop_list_sz = 0;
-	last_requests[slot_id].ineffect = true;
-	last_requests[slot_id].rq_id = request_id;
-	siot_mesh_add_last_hop_data( slot_id, last_hop_id, last_hop_bus_id, conn_q );
-}
-
-bool siot_mesh_clean_last_hop_data_storage_if_single_element( uint8_t slot_id )
-{
-	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
-	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz != 0 );
-	if ( last_requests[slot_id].hop_list_sz == 1 )
-	{
-		last_requests[slot_id].hop_list_sz = 0;
-		last_requests[slot_id].ineffect = false;
-		return true;
-	}
-	return false;
-}
-
-void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers, uint16_t* request_id )
-{
-	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
-	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
-	uint8_t i;
-	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz <= SIOT_MESH_LAST_HOP_DATA_MAX );
-	*request_id = last_requests[slot_id].rq_id;
-	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz > 0 ); // is it at all possible to have here 0 at time of calling? 
-	for ( i=0; i<last_requests[slot_id].hop_list_sz-1; i++)
-	{
-		// TODO: use bit-field processing where applicable
-		uint16_t header = 1 | ( SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP << 1 ) | ( last_hops[ i ].last_hop_id << 4 );
-		zepto_parser_encode_and_append_uint16( mem_h, header );
-		zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
-		zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
-	}
-	ZEPTO_DEBUG_ASSERT( i == last_requests[slot_id].hop_list_sz - 1 ); 
-	uint16_t header = ( no_more_headers ? 0: 1 ) | ( SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP << 1 ) | ( last_hops[ i ].last_hop_id << 4 );
-	zepto_parser_encode_and_append_uint16( mem_h, header );
-	zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
-	zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
 }
 
 void siot_mesh_init_at_life_start()
@@ -321,7 +215,540 @@ uint16_t siot_mesh_calculate_route_table_checksum()
 	return 0;
 }
 
-#endif // !defined USED_AS_MASTER
+MEMORY_HANDLE resend_task_holder_mh = MEMORY_HANDLE_INVALID;
+
+#define SIOT_MESH_RET_RESEND_TASK_NONE_EXISTS 6
+#define SIOT_MESH_RET_RESEND_TASK_NOT_NOW 7
+#define SIOT_MESH_RET_RESEND_TASK_INTERM 8
+#define SIOT_MESH_RET_RESEND_TASK_FINAL 9
+#define PENDING_RESENDS_MAX 2 // WARNING: if changed, have more handles (at least, potentially)!
+MESH_PENDING_RESENDS pending_resends[PENDING_RESENDS_MAX] = { {MEMORY_HANDLE_MESH_1, 0}, { MEMORY_HANDLE_MESH_2, 0} };
+
+void siot_mesh_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event )
+{
+	// 1. prepare resend task
+	MESH_PENDING_RESENDS resend;
+	resend.target_id = target_id;
+	resend.packet_h = acquire_memory_handle();
+	resend.checksum = checksum;
+	resend.resend_cnt = SIOT_MESH_SUBJECT_FOR_MESH_RESEND;
+	sa_time_val diff_tval;
+	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
+	sa_hal_time_val_copy_from( &(resend.next_resend_time), currt );
+	SA_TIME_INCREMENT_BY_TICKS( resend.next_resend_time, diff_tval );
+	if ( resend.packet_h == MEMORY_HANDLE_INVALID )
+	{
+		ZEPTO_DEBUG_ASSERT( 0 == "memory deficiency (getting invalid handle) is not considered yet" ); // TODO: consider and implement
+	}
+	zepto_copy_request_to_response_of_another_handle( packet, resend.packet_h );
+	zepto_response_to_request( resend.packet_h );
+
+	// 2. add resend task
+/*	parser_obj po_start, po_end;
+	zepto_parser_init( &po_start, resend_task_holder_mh );
+	zepto_parser_init( &po_end, resend_task_holder_mh );
+	zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po_start ) );
+	zepto_convert_part_of_request_to_response( resend_task_holder_mh, &po_start, &po_end );
+	zepto_write_block( resend_task_holder_mh, &resend, sizeof( MESH_PENDING_RESENDS ) );
+	zepto_response_to_request( resend_task_holder_mh );*/
+	zepto_memman_append_locally_generated_data( resend_task_holder_mh, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+
+	// 3. calculate time to the nearest event
+//	zepto_parser_init( &po_start, resend_task_holder_mh );
+	uint16_t offset;
+	sa_time_val remaining;
+	SA_TIME_SET_INFINITE_TIME( *time_to_next_event );
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+//	while ( zepto_parsing_remaining_bytes( &po_start ) )
+	{
+//		zepto_parse_read_block( &po_start, &resend, sizeof( MESH_PENDING_RESENDS ) );
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		uint8_t in_future = sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), &remaining );
+		sa_hal_time_val_copy_from_if_src_less( time_to_next_event, &remaining );
+		if ( !in_future )
+			break;
+	}
+}
+
+uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, sa_time_val* time_to_next_event )
+{
+	uint8_t it = 0, it_oldest = (uint8_t)(-1);
+	uint16_t offset;
+	MESH_PENDING_RESENDS resend;
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+
+//	parser_obj po, po_end;
+/*	zepto_parser_init( &po, resend_task_holder_mh );
+	if ( zepto_parsing_remaining_bytes( &po ) == 0 )
+		return SIOT_MESH_RET_RESEND_TASK_NONE_EXISTS;*/
+	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( resend_task_holder_mh ) )
+		return SIOT_MESH_RET_RESEND_TASK_NONE_EXISTS;
+
+/*	while ( zepto_parsing_remaining_bytes( &po ) )
+	{
+		zepto_parse_read_block( &po, &resend, sizeof( MESH_PENDING_RESENDS ) );*/
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+//	while ( zepto_parsing_remaining_bytes( &po_start ) )
+	{
+//		zepto_parse_read_block( &po_start, &resend, sizeof( MESH_PENDING_RESENDS ) );
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		if ( it_oldest == (uint8_t)(-1) )
+		{
+			if ( sa_hal_time_val_is_less_eq( &(resend.next_resend_time), &oldest_time_point ) ) // used slot is yet older
+			{
+				sa_hal_time_val_copy_from( &oldest_time_point, &(resend.next_resend_time) );
+				it_oldest = it;
+			}
+		}
+		else
+		{
+			if ( sa_hal_time_val_is_less( &(resend.next_resend_time), &oldest_time_point ) ) // used slot is yet older
+			{
+				sa_hal_time_val_copy_from( &oldest_time_point, &(resend.next_resend_time) );
+				it_oldest = it;
+			}
+		}
+		it++;
+	}
+
+/*	zepto_parser_init( &po, resend_task_holder_mh );
+	while ( zepto_parsing_remaining_bytes( &po ) )
+	{
+		zepto_parse_read_block( &po, &resend, sizeof( MESH_PENDING_RESENDS ) );*/
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+//	while ( zepto_parsing_remaining_bytes( &po_start ) )
+	{
+//		zepto_parse_read_block( &po_start, &resend, sizeof( MESH_PENDING_RESENDS ) );
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		ZEPTO_DEBUG_ASSERT( resend.resend_cnt > 0 );
+		if ( it_oldest == (uint8_t)(-1) )
+		{
+			if ( sa_hal_time_val_is_less_eq( &(resend.next_resend_time), &oldest_time_point ) ) // used slot is yet older
+			{
+				sa_hal_time_val_copy_from( &oldest_time_point, &(resend.next_resend_time) );
+				it_oldest = it;
+			}
+		}
+		else
+		{
+			if ( sa_hal_time_val_is_less( &(resend.next_resend_time), &oldest_time_point ) ) // used slot is yet older
+			{
+				sa_hal_time_val_copy_from( &oldest_time_point, &(resend.next_resend_time) );
+				it_oldest = it;
+			}
+		}
+		it++;
+	}
+
+	if ( it_oldest == (uint8_t)(-1) ) // none good for present time; just calculate time to wake up us next time
+	{
+/*		zepto_parser_init( &po, resend_task_holder_mh );
+		while ( zepto_parsing_remaining_bytes( &po ) )
+		{
+			zepto_parse_read_block( &po, &resend, sizeof( MESH_PENDING_RESENDS ) );*/
+		for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+	//	while ( zepto_parsing_remaining_bytes( &po_start ) )
+		{
+	//		zepto_parse_read_block( &po_start, &resend, sizeof( MESH_PENDING_RESENDS ) );
+			if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+				break;
+			sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+		}
+		return SIOT_MESH_RET_RESEND_TASK_NOT_NOW;
+	}
+
+	// there is a packet to resend
+/*	zepto_parser_init( &po, resend_task_holder_mh );
+	zepto_parser_init( &po_end, resend_task_holder_mh );
+	zepto_parse_skip_block( &po_end, it_oldest * sizeof( MESH_PENDING_RESENDS ) );
+	zepto_parse_read_block( &po, &resend, sizeof( MESH_PENDING_RESENDS ) );*/
+	zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, it_oldest * sizeof( MESH_PENDING_RESENDS ), sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+
+	bool final_in_seq = resend.resend_cnt == 1;
+	ZEPTO_DEBUG_ASSERT( resend.resend_cnt > 0 );
+	*target_id = resend.target_id;
+	zepto_parser_free_memory( packet );
+	zepto_copy_request_to_response_of_another_handle( resend.packet_h, packet );
+	zepto_response_to_request( packet );
+
+	if ( final_in_seq ) // erase resend task
+	{
+		release_memory_handle( resend.packet_h );
+/*		zepto_parser_init( &po, resend_task_holder_mh );
+		zepto_parser_init( &po_end, resend_task_holder_mh );
+		zepto_parse_skip_block( &po_end, it_oldest * sizeof( MESH_PENDING_RESENDS ) );
+		zepto_append_part_of_request_to_response( resend_task_holder_mh, &po, &po_end );
+		zepto_parse_skip_block( &po, sizeof( MESH_PENDING_RESENDS ) );
+		zepto_parse_skip_block( &po_end, sizeof( MESH_PENDING_RESENDS ) );
+		zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po ) );
+		zepto_append_part_of_request_to_response( resend_task_holder_mh, &po, &po_end );
+		zepto_response_to_request( resend_task_holder_mh );*/
+		for ( offset=it_oldest * sizeof( MESH_PENDING_RESENDS ); ; offset += sizeof( MESH_PENDING_RESENDS ) )
+		{
+			if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset + sizeof( MESH_PENDING_RESENDS ), sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+				break;
+			zepto_memman_write_locally_generated_data_by_offset( resend_task_holder_mh, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+		}
+		zepto_memman_trim_locally_generated_data_at_right( resend_task_holder_mh, sizeof( MESH_PENDING_RESENDS ) );
+	}
+	else // update task
+	{
+		(resend.resend_cnt) --;
+		sa_time_val diff_tval;
+		TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
+		sa_hal_time_val_copy_from( &(resend.next_resend_time), currt );
+		SA_TIME_INCREMENT_BY_TICKS( resend.next_resend_time, diff_tval );
+		// update data in memory
+/*		zepto_parser_init( &po, resend_task_holder_mh );
+		zepto_parser_init( &po_end, resend_task_holder_mh );
+		zepto_parse_skip_block( &po_end, it_oldest * sizeof( MESH_PENDING_RESENDS ) );
+		zepto_append_part_of_request_to_response( resend_task_holder_mh, &po, &po_end );
+		zepto_write_block( resend_task_holder_mh, &resend, sizeof( MESH_PENDING_RESENDS ) );
+		zepto_parse_skip_block( &po, sizeof( MESH_PENDING_RESENDS ) );
+		zepto_parse_skip_block( &po_end, sizeof( MESH_PENDING_RESENDS ) );
+		zepto_parse_skip_block( &po_end, zepto_parsing_remaining_bytes( &po ) );
+		zepto_append_part_of_request_to_response( resend_task_holder_mh, &po, &po_end );
+		zepto_response_to_request( resend_task_holder_mh );*/
+		zepto_memman_write_locally_generated_data_by_offset( resend_task_holder_mh, it_oldest * sizeof( MESH_PENDING_RESENDS ), sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+	}
+
+	// now we calculate remaining time for only actually remaining tasks
+/*	zepto_parser_init( &po, resend_task_holder_mh );
+	while ( zepto_parsing_remaining_bytes( &po ) )
+	{
+		zepto_parse_read_block( &po, &resend, sizeof( MESH_PENDING_RESENDS ) );
+		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+	}*/
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+	{
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset + sizeof( MESH_PENDING_RESENDS ), sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+	}
+
+	return final_in_seq ? SIOT_MESH_RET_RESEND_TASK_FINAL : SIOT_MESH_RET_RESEND_TASK_INTERM;
+}
+
+void siot_mesh_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event )
+{
+	uint16_t offset, gap;
+	MESH_PENDING_RESENDS resend;
+//	bool one_found = false;
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+
+/*	parser_obj po, po_end;
+	zepto_parser_init( &po, resend_task_holder_mh );
+	if ( zepto_parsing_remaining_bytes( &po ) == 0 )
+		return;*/
+	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( resend_task_holder_mh ) )
+		return;
+
+/*	while ( zepto_parsing_remaining_bytes( &po ) )
+	{
+		zepto_parse_read_block( &po, &resend, sizeof( MESH_PENDING_RESENDS ) );*/
+	gap = 0;
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+	{
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		if ( resend.checksum == checksum )
+			gap += sizeof( MESH_PENDING_RESENDS );
+		else
+			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( resend_task_holder_mh, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+		{
+		}
+	}
+	if ( gap )	zepto_memman_trim_locally_generated_data_at_right( resend_task_holder_mh, gap );
+
+	// now we calculate remaining time for only actually remaining tasks
+/*	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+		sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), time_to_next_event );*/
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+	{
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+	}
+}
+
+void siot_mesh_remove_resend_task_by_device_id( uint16_t target_id, const sa_time_val* currt, sa_time_val* time_to_next_event )
+{
+/*	PENDING_RESENDS_ITERATOR it = pending_resends.begin(), it_erase;
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+
+	if ( pending_resends.size() == 0 )
+		return;
+
+	bool one_found = false;
+
+	while ( it != pending_resends.end() )
+	{
+		if ( it->target_id == target_id )
+		{
+			it_erase = it;
+			++it;
+			pending_resends.erase( it_erase);
+		}
+		else
+			++it;
+	}
+
+	// now we calculate remaining time for only actually remaining tasks
+	for ( it = pending_resends.begin(); it != pending_resends.end(); ++it )
+		sa_hal_time_val_get_remaining_time( currt, &(it->next_resend_time), time_to_next_event );*/
+
+	uint16_t offset, gap;
+	MESH_PENDING_RESENDS resend;
+	sa_time_val oldest_time_point;
+	sa_hal_time_val_copy_from( &oldest_time_point, currt );
+
+	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( resend_task_holder_mh ) )
+		return;
+
+	gap = 0;
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+	{
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		if ( resend.target_id == target_id )
+			gap += sizeof( MESH_PENDING_RESENDS );
+		else
+			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( resend_task_holder_mh, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+	}
+	if ( gap )	zepto_memman_trim_locally_generated_data_at_right( resend_task_holder_mh, gap );
+
+	// now we calculate remaining time for only actually remaining tasks
+	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+	{
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( resend_task_holder_mh, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+			break;
+		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+	}
+}
+#else // USED_AS_RETRANSMITTER
+
+//#define SIOT_MESH_LINK_TABLE_SIZE_MAX 1
+//#define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 1
+typedef struct _SIOT_MESH_LINK_TO_ROOT_AT_TERMINAL_DEVICE
+{
+	uint8_t valid;
+	uint16_t NEXT_HOP; // note: this link will be common for all targets that are reachable through a device with NEXT_HOP device ID
+	uint16_t BUS_ID; // type is inspired in section "Communicating Routing Table Information over SACCP" by "BUS-ID is an Encoded-Unsigned-Int<max=2> field"
+	uint8_t INTRA_BUS_ID; // INTRA-BUS-ID=NULL means that the entry is for an incoming link. Incoming link entries are relatiely rare, and are used to specify LINK-DELAYs.
+	uint8_t NEXT_HOP_ACKS; // NEXT-HOP-ACKS is a flag which is set if the nearest hop (over (BUS-ID,INTRA-BUS-ID)) is known to be able not only to receive packets, but to send ACKs back
+	uint16_t LINK_DELAY_UNIT; // type is inspired: same section as above
+	uint16_t LINK_DELAY; // type is inspired: same section as above
+	uint16_t LINK_DELAY_ERROR; // type is inspired: same section as above
+} SIOT_MESH_LINK_TO_ROOT_AT_TERMINAL_DEVICE;
+
+SIOT_MESH_LINK_TO_ROOT_AT_TERMINAL_DEVICE link_to_root;
+
+void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
+{
+	link_to_root.valid = 0;
+}
+
+void siot_mesh_init_at_life_start()
+{
+	link_to_root.valid = 0;
+}
+
+void siot_mesh_clear_rout_table()
+{
+	link_to_root.valid = 0;
+}
+
+uint8_t siot_mesh_target_to_link_id( uint16_t target_id, uint16_t* link_id )
+{
+	if (link_to_root.valid )
+	{
+			*link_id = 0; // formal value
+			return SIOT_MESH_RET_OK;
+	}
+	else
+		return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
+uint8_t siot_mesh_get_link( uint16_t link_id, SIOT_MESH_LINK* link )
+{
+	ZEPTO_DEBUG_ASSERT( link_id == 0 );
+	if (link_to_root.valid )
+	{
+		link->LINK_ID = 0;
+		link->NEXT_HOP = link_to_root.NEXT_HOP;
+		link->BUS_ID = link_to_root.BUS_ID;
+		link->INTRA_BUS_ID = link_to_root.INTRA_BUS_ID;
+		link->NEXT_HOP_ACKS = link_to_root.NEXT_HOP_ACKS;
+		link->LINK_DELAY_UNIT = link_to_root.LINK_DELAY_UNIT;
+		link->LINK_DELAY = link_to_root.LINK_DELAY;
+		link->LINK_DELAY_ERROR = link_to_root.LINK_DELAY_ERROR;
+		return SIOT_MESH_RET_OK;
+	}
+	else
+		return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
+}
+
+uint8_t siot_mesh_add_link( SIOT_MESH_LINK* link )
+{
+	ZEPTO_DEBUG_ASSERT( link->LINK_ID == 0 );
+	link_to_root.valid = 1;
+
+	link_to_root.NEXT_HOP = link->NEXT_HOP;
+	link_to_root.BUS_ID = link->BUS_ID;
+	link_to_root.INTRA_BUS_ID = link->INTRA_BUS_ID;
+	link_to_root.NEXT_HOP_ACKS = link->NEXT_HOP_ACKS;
+	link_to_root.LINK_DELAY_UNIT = link->LINK_DELAY_UNIT;
+	link_to_root.LINK_DELAY = link->LINK_DELAY;
+	link_to_root.LINK_DELAY_ERROR = link->LINK_DELAY_ERROR;
+	return SIOT_MESH_RET_OK;
+}
+
+uint8_t siot_mesh_remove_link( uint16_t link_id )
+{
+	if ( link_id == 0 )
+	{
+		link_to_root.valid = 0;
+		return SIOT_MESH_RET_OK;
+	}
+	else
+		return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
+uint8_t siot_mesh_delete_route( uint16_t target_id )
+{
+	if ( target_id == 0 )
+	{
+		link_to_root.valid = 0;
+		return SIOT_MESH_RET_OK;
+	}
+	else
+		return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
+uint8_t siot_mesh_add_route( uint16_t target_id, uint16_t link_id )
+{
+	ZEPTO_DEBUG_ASSERT( target_id == 0 );
+	ZEPTO_DEBUG_ASSERT( link_id == 0 );
+	return SIOT_MESH_RET_OK;
+}
+
+uint16_t siot_mesh_calculate_route_table_checksum()
+{
+	return 0;
+}
+
+#define PENDING_RESENDS_MAX 2 // WARNING: if changed, have more handles (at least, potentially)!
+MESH_PENDING_RESENDS pending_resends[PENDING_RESENDS_MAX] = { {MEMORY_HANDLE_MESH_1, 0}, { MEMORY_HANDLE_MESH_2, 0} };
+
+#endif // USED_AS_RETRANSMITTER
+
+
+#define SIOT_MESH_LAST_HOP_DATA_MAX 4
+
+static SIOT_MESH_LAST_HOP_DATA _last_hops_0[ SIOT_MESH_LAST_HOP_DATA_MAX ];
+static SIOT_MESH_LAST_HOP_DATA _last_hops_1[ SIOT_MESH_LAST_HOP_DATA_MAX ];
+
+typedef struct _SIOT_MESH_LAST_REQUEST
+{
+	uint16_t rq_id;
+//	MEMORY_HANDLE hop_list;
+	SIOT_MESH_LAST_HOP_DATA* hop_list;
+	uint8_t hop_list_sz;
+	bool ineffect;
+} SIOT_MESH_LAST_REQUEST;
+
+static SIOT_MESH_LAST_REQUEST last_requests[2] = 
+{
+	{0xFFFF, _last_hops_0, 0, false},
+	{0xFFFF, _last_hops_1, 0, false},
+};
+
+//static uint16_t last_rq_id;
+
+#define SIOT_MESH_QUALITY_OF_FIRST_IS_BETTER( a, b ) (a) < (b)
+
+void siot_mesh_add_last_hop_data( uint8_t slot_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
+{
+	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
+	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
+	// we keep this array sorted in order of packets (with the same request id
+	if ( last_requests[slot_id].hop_list_sz < SIOT_MESH_LAST_HOP_DATA_MAX )
+	{
+		last_hops[last_requests[slot_id].hop_list_sz].last_hop_id = last_hop_id;
+		last_hops[last_requests[slot_id].hop_list_sz].last_hop_bus_id = last_hop_bus_id;
+		last_hops[last_requests[slot_id].hop_list_sz].conn_quality = conn_q;
+		(last_requests[slot_id].hop_list_sz)++;
+	}
+	else
+	{
+		ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz == SIOT_MESH_LAST_HOP_DATA_MAX );
+		uint8_t i;
+		uint8_t worst = 0;
+		for ( i=1; i<SIOT_MESH_LAST_HOP_DATA_MAX; i++)
+			if ( ! SIOT_MESH_QUALITY_OF_FIRST_IS_BETTER( last_hops[ i ].conn_quality, last_hops[ worst ].conn_quality ) )
+				worst = i;
+		if ( SIOT_MESH_QUALITY_OF_FIRST_IS_BETTER( conn_q, last_hops[ worst ].conn_quality ) )
+		{
+			ZEPTO_MEMMOV( last_hops + worst, last_hops + worst + 1, ( SIOT_MESH_LAST_HOP_DATA_MAX - worst - 1 ) * sizeof( SIOT_MESH_LAST_HOP_DATA ) );
+			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].last_hop_id = last_hop_id;
+			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].last_hop_bus_id = last_hop_bus_id;
+			last_hops[ SIOT_MESH_LAST_HOP_DATA_MAX - 1 ].conn_quality = conn_q;
+		}
+	}
+}
+
+void siot_mesh_init_last_hop_data_storage( uint8_t slot_id, uint16_t request_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
+{
+	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
+	last_requests[slot_id].hop_list_sz = 0;
+	last_requests[slot_id].ineffect = true;
+	last_requests[slot_id].rq_id = request_id;
+	siot_mesh_add_last_hop_data( slot_id, last_hop_id, last_hop_bus_id, conn_q );
+}
+
+bool siot_mesh_clean_last_hop_data_storage_if_single_element( uint8_t slot_id )
+{
+	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
+	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz != 0 );
+	if ( last_requests[slot_id].hop_list_sz == 1 )
+	{
+		last_requests[slot_id].hop_list_sz = 0;
+		last_requests[slot_id].ineffect = false;
+		return true;
+	}
+	return false;
+}
+
+void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers, uint16_t* request_id )
+{
+	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
+	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
+	uint8_t i;
+	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz <= SIOT_MESH_LAST_HOP_DATA_MAX );
+	*request_id = last_requests[slot_id].rq_id;
+	ZEPTO_DEBUG_ASSERT( last_requests[slot_id].hop_list_sz > 0 ); // is it at all possible to have here 0 at time of calling? 
+	for ( i=0; i<last_requests[slot_id].hop_list_sz-1; i++)
+	{
+		// TODO: use bit-field processing where applicable
+		uint16_t header = 1 | ( SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP << 1 ) | ( last_hops[ i ].last_hop_id << 4 );
+		zepto_parser_encode_and_append_uint16( mem_h, header );
+		zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
+		zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
+	}
+	ZEPTO_DEBUG_ASSERT( i == last_requests[slot_id].hop_list_sz - 1 ); 
+	uint16_t header = ( no_more_headers ? 0: 1 ) | ( SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP << 1 ) | ( last_hops[ i ].last_hop_id << 4 );
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+	zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
+	zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
+}
+
+#endif // USED_AS_MASTER
 
 
 ////////////////////////////  ROUTE and LINK table processing   //////////////////////////////////
@@ -1608,7 +2035,7 @@ if ( ret_code != SIOT_MESH_RET_OK )
 
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* link_id )
 {
-	ZEPTO_DEBUG_PRINTF_1( "         +++++++++++++++++++############  handler_siot_mesh_timer() called  ###########++++++++++++++++++++++\n" );
+//	ZEPTO_DEBUG_PRINTF_1( "         +++++++++++++++++++############  handler_siot_mesh_timer() called  ###########++++++++++++++++++++++\n" );
 	// TODO: processing on a terminating device is much easier, reimplement!!!
 	uint8_t i;
 	bool time_still_remains;
@@ -1672,7 +2099,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	for ( i=0; i<PENDING_RESENDS_MAX; i++ )
 		if ( pending_resends[i].resend_cnt ) // used slot
 			sa_hal_time_val_get_remaining_time( currt, &(pending_resends[i].next_resend_time), &(wf->wait_time) );
-	ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): time to next event: %d, %d  ###########\n", wf->wait_time.low_t, wf->wait_time.high_t );
+//	ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): time to next event: %d, %d  ###########\n", wf->wait_time.low_t, wf->wait_time.high_t );
 
 	return packet_ready ? SIOT_MESH_RET_PASS_TO_SEND : SIOT_MESH_RET_OK;
 }
@@ -1692,6 +2119,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 		}
 
 #ifdef USED_AS_RETRANSMITTER
+#if 0
 		// we're to start our own resend sequence
 		uint8_t i;
 		uint8_t free_slot = 0xFF;
@@ -1733,6 +2161,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 				ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): yet known route, requesting ACK  ###########\n" );
 				return SIOT_MESH_RET_OK;
 			}
+#endif
 #else // USED_AS_RETRANSMITTER
 		uint16_t checksum;
 		siot_mesh_form_unicast_packet( mem_h, *link_id, target_id, true, &checksum );
