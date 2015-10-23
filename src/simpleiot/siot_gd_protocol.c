@@ -75,7 +75,7 @@ void sagdp_init( SAGDP_DATA* sagdp_data )
 	sagdp_data->resent_ordinal = 0;
 	sagdp_data->event_type = SAGDP_EV_NONE; // in this case we do not care about next_event_time
 
-	ZEPTO_DEBUG_PRINTF_1( "------------ event set to SAGDP_EV_NONE ----------------\n" );
+//	ZEPTO_DEBUG_PRINTF_1( "------------ event set to SAGDP_EV_NONE ----------------\n" );
 }
 
 // PROCESSING TIMEOUT-BASED SEQUENCES

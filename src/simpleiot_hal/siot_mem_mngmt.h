@@ -146,6 +146,13 @@ uint16_t zepto_writer_get_response_size( MEMORY_HANDLE mem_h );
 void zepto_parser_free_memory( REQUEST_REPLY_HANDLE mem_h );
 void zepto_parser_free_response( REQUEST_REPLY_HANDLE mem_h );
 void zepto_parser_strip_beginning_of_request( parser_obj* po );
+
+// special r/w functions for operations with locally generated data
+bool zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t size, uint8_t* buff );
+bool zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t size, const uint8_t* buff );
+void zepto_memman_append_locally_generated_data( MEMORY_HANDLE mem_h, uint16_t size, const uint8_t* buff );
+bool zepto_memman_trim_locally_generated_data_at_right( MEMORY_HANDLE mem_h, uint16_t size );
+uint16_t zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE mem_h );
 /*
 void zepto_writer_get_copy_of_response( MEMORY_HANDLE mem_h, uint8_t* buff );
 */
