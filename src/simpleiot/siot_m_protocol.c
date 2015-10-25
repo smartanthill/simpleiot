@@ -261,7 +261,7 @@ void siot_mesh_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, 
 	}
 }
 
-uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, sa_time_val* time_to_next_event )
+uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, uint16_t* target_id, const sa_time_val* currt, sa_time_val* time_to_next_event )
 {
 	uint8_t it = 0, it_oldest = (uint8_t)(-1);
 	uint16_t offset;
@@ -1914,6 +1914,52 @@ if ( ret_code != SIOT_MESH_RET_OK )
 
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* link_id )
 {
+#ifdef USED_AS_RETRANSMITTER
+	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
+
+	uint16_t device_id;
+	uint8_t ret_code = siot_mesh_get_resend_task( mem_h, &device_id, currt, &(wf->wait_time) );
+	zepto_response_to_request( mem_h );
+	switch (ret_code )
+	{
+		case SIOT_MESH_RET_RESEND_TASK_NONE_EXISTS:
+		case SIOT_MESH_RET_RESEND_TASK_NOT_NOW:
+			break;
+		case SIOT_MESH_RET_RESEND_TASK_INTERM:
+		{
+			uint16_t checksum;
+			bool route_known = siot_mesh_target_to_link_id( device_id, link_id ) == SIOT_MESH_RET_OK;
+			if ( route_known )
+			{
+				siot_mesh_form_unicast_packet( mem_h, *link_id, device_id, true, &checksum );
+			}
+			else
+			{
+				siot_mesh_remove_resend_task_by_device_id( device_id, currt, &(wf->wait_time) );
+				uint16_t bus_id_to_use = 0;
+//				siot_mesh_form_packet_from_santa( mem_h, device_id, bus_id_to_use );
+			}
+			return SIOT_MESH_RET_PASS_TO_SEND;
+			break;
+		}
+		case SIOT_MESH_RET_RESEND_TASK_FINAL:
+		{
+//			siot_mesh_remove_link_to_target( device_id );
+			siot_mesh_delete_route( device_id );
+			uint16_t bus_id_to_use = 0;
+//			siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
+			return SIOT_MESH_RET_PASS_TO_SEND;
+			break;
+		}
+		default:
+		{
+			ZEPTO_DEBUG_ASSERT( 0 == "Unexpected ret code" );
+			break;
+		}
+	}
+	return SIOT_MESH_RET_OK;
+
+#else // USED_AS_RETRANSMITTER
 //	ZEPTO_DEBUG_PRINTF_1( "         +++++++++++++++++++############  handler_siot_mesh_timer() called  ###########++++++++++++++++++++++\n" );
 	// TODO: processing on a terminating device is much easier, reimplement!!!
 	uint8_t i;
@@ -1981,6 +2027,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 //	ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): time to next event: %d, %d  ###########\n", wf->wait_time.low_t, wf->wait_time.high_t );
 
 	return packet_ready ? SIOT_MESH_RET_PASS_TO_SEND : SIOT_MESH_RET_OK;
+#endif
 }
 
 uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint8_t mesh_val, uint8_t resend_cnt, uint16_t target_id, uint16_t* link_id )
