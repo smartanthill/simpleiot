@@ -221,8 +221,6 @@ MEMORY_HANDLE resend_task_holder_mh = MEMORY_HANDLE_INVALID;
 #define SIOT_MESH_RET_RESEND_TASK_NOT_NOW 7
 #define SIOT_MESH_RET_RESEND_TASK_INTERM 8
 #define SIOT_MESH_RET_RESEND_TASK_FINAL 9
-#define PENDING_RESENDS_MAX 2 // WARNING: if changed, have more handles (at least, potentially)!
-MESH_PENDING_RESENDS pending_resends[PENDING_RESENDS_MAX] = { {MEMORY_HANDLE_MESH_1, 0}, { MEMORY_HANDLE_MESH_2, 0} };
 
 void siot_mesh_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event )
 {
@@ -1495,6 +1493,9 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 
 				// remove resend tasks (if any)
+#ifdef USED_AS_RETRANSMITTER
+				siot_mesh_remove_resend_task_by_hash( checksum, currt, &(wf->wait_time) );
+#else // USED_AS_RETRANSMITTER
 				uint8_t i;
 				for ( i=0; i<PENDING_RESENDS_MAX; i++ )
 					if ( pending_resends[i].resend_cnt && pending_resends[i].checksum == ack_checksum ) // used slot with received checksum
@@ -1507,6 +1508,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				for ( i=0; i<PENDING_RESENDS_MAX; i++ )
 					if ( pending_resends[i].resend_cnt ) // used slot
 						sa_hal_time_val_get_remaining_time( currt, &(pending_resends[i].next_resend_time), &(wf->wait_time) );
+#endif // USED_AS_RETRANSMITTER
 
 				return SIOT_MESH_RET_OK;
 			}
@@ -1937,6 +1939,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			{
 				siot_mesh_remove_resend_task_by_device_id( device_id, currt, &(wf->wait_time) );
 				uint16_t bus_id_to_use = 0;
+				// TODO: proper action
 //				siot_mesh_form_packet_from_santa( mem_h, device_id, bus_id_to_use );
 			}
 			return SIOT_MESH_RET_PASS_TO_SEND;
@@ -1947,6 +1950,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 //			siot_mesh_remove_link_to_target( device_id );
 			siot_mesh_delete_route( device_id );
 			uint16_t bus_id_to_use = 0;
+			// TODO: proper action
 //			siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
@@ -2088,6 +2092,40 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 				return SIOT_MESH_RET_OK;
 			}
 #endif
+	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, link_id );
+	if ( ret_code == SIOT_MESH_RET_OK )
+	{
+		if ( resend_cnt < SIOT_MESH_SUBJECT_FOR_ACK )
+		{
+			uint16_t checksum;
+			siot_mesh_form_unicast_packet( target_id, mem_h, *link_id, false, &checksum );
+			ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): known route  ###########\n" );
+			return SIOT_MESH_RET_OK;
+		}
+
+		uint16_t checksum;
+		siot_mesh_form_unicast_packet( target_id, mem_h, *link_id, false, &checksum );
+		sa_time_val wait_tval;
+		siot_mesh_add_resend_task( mem_h, currt, checksum, target_id, &wait_tval );
+		sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &wait_tval );
+
+		return SIOT_MESH_RET_OK;
+	}
+	else
+	{
+		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
+
+		// packet "from Santa" will be sent... let's form a packet
+
+		// TODO: determine which physical links we will use; we will have to iterate over all of them
+		// NOTE: currently we assume that we have a single link with bus_id = 0
+		uint16_t bus_id_to_use = 0;
+		// TODO: proper action
+//		siot_mesh_form_packet_from_santa( mem_h, target_id, bus_id_to_use );
+	}
+
+
+	return SIOT_MESH_RET_OK;
 #else // USED_AS_RETRANSMITTER
 		uint16_t checksum;
 		siot_mesh_form_unicast_packet( mem_h, *link_id, target_id, true, &checksum );
@@ -2119,18 +2157,6 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 
 		return SIOT_MESH_RET_OK;
 #endif // USED_AS_RETRANSMITTER
-
-		// NOTE: subsequent retransmits initiated by MESH will be done by timer; as well as falling to sending 'to_santa' packet in the ultimate case
-/*		else if ( resend_cnt < SIOT_MESH_SUBJECT_FOR_RECORD_DROP )
-		{
-			siot_mesh_form_unicast_packet( mem_h, *link_id, target_id );
-			ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): known route; ACK would be requested  ###########\n" );
-		}
-		else
-		{
-			ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): route appears to be lost  ###########\n" );
-			siot_mesh_form_packet_to_santa( mem_h, mesh_val, target_id );
-		}*/
 	}
 	else
 	{
