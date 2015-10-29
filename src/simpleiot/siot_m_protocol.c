@@ -773,7 +773,7 @@ void siot_mesh_form_unicast_packet( uint16_t target_id, MEMORY_HANDLE mem_h, uin
 	parser_obj po, po1;
 	uint16_t header;
 	SIOT_MESH_LINK link;
-	uint8_t ret_code = siot_mesh_get_link( target_id, link_id, &link );
+	uint8_t ret_code = siot_mesh_get_link( link_id, &link );
 	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK ); // we do not expect that being here we have an invalid link_id
 	ZEPTO_DEBUG_ASSERT( link.LINK_ID == link_id );
 	// !!! TODO: it might happen that this packet is not a reply to 'from Santa'; check, which data should be added this case
@@ -1058,8 +1058,9 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL:
 		{
-			siot_mesh_at_root_remove_link_to_target( *device_id );
+			siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( *device_id );
 			uint16_t bus_id_to_use = 0;
+			//+++++TODO: revise!
 			siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
@@ -1079,7 +1080,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
 		{
 			siot_mesh_at_root_remove_last_hop_data( target_id );
-			ret_code = siot_mesh_at_root_add_updates_for_device( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
+			ret_code = siot_mesh_at_root_add_updates_for_device_when_route_is_added( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
 			hop_data_added = true;
 		}
 	}
@@ -1318,12 +1319,13 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				{
 					// NOTE/TODO: here we rely only on checksum-based integrity check; we should be ready to failure of any of zepto_parse_encoded_uint16() calls below
 					// TODO: what should we do with incorrectly constructed packets?
-					uint16_t point_of_failure = zepto_parse_encoded_uint16( &po );
-					uint16_t failed_next_hop = zepto_parse_encoded_uint16( &po );
+					uint16_t reporting_device_id = zepto_parse_encoded_uint16( &po );
+					uint16_t failed_hop_id = zepto_parse_encoded_uint16( &po );
 					uint16_t failed_target = zepto_parse_encoded_uint16( &po );
 					uint16_t original_packet_checksum = zepto_parse_encoded_uint16( &po );
 
-					//+++++TODO: remove items according to data received
+					siot_mesh_at_root_remove_link_to_target_route_error_reported( reporting_device_id, failed_hop_id );
+					//+++++TODO: are there any other items to be scheduled/removed?
 					return SIOT_MESH_RET_OK;
 				}
 				else // packet is broken; subject for NAK
@@ -2138,7 +2140,7 @@ void siot_mesh_form_routing_error_packet( MEMORY_HANDLE mem_h/*, uint16_t link_i
 	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 
 	// PAYLOAD
-	// | ERROR-ORIGIN-DEVICE-ID | NEXT_HOP_AT_ORIGIN | TARGET-DEVICE-ID | ORIGINAL-PACKET-CHECKSUM |
+	// | ERROR-REPORTING-DEVICE-ID | NEXT_HOP_AT_ORIGIN | TARGET-DEVICE-ID | ORIGINAL-PACKET-CHECKSUM |
 	zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
 	zepto_parser_encode_and_append_uint16( mem_h, failed_next_hop );
 	zepto_parser_encode_and_append_uint16( mem_h, failed_target );
