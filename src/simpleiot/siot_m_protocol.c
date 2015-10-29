@@ -1388,8 +1388,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		// we implement quick coding assuming no extra data follow
 		// TODO: full implementation with VIA fields, etc
 		*src_id = zepto_parse_encoded_uint16( &po );
-		*src_id >>= 1;
 		ZEPTO_DEBUG_ASSERT( (*src_id & 1) == 0 ); // TODO: provide full implementation
+		*src_id >>= 1;
 
 		// OPTIONAL-PAYLOAD-SIZE
 
@@ -1933,8 +1933,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		// we implement quick coding assuming no extra data follow
 		// TODO: full implementation with VIA fields, etc
 		uint16_t target_id = zepto_parse_encoded_uint16( &po );
-		target_id >>= 1;
 		ZEPTO_DEBUG_ASSERT( (target_id & 1) == 0 ); // TODO: provide full implementation
+		target_id >>= 1;
 
 #ifdef USED_AS_RETRANSMITTER
 #else // USED_AS_RETRANSMITTER

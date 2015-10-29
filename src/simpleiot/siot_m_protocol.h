@@ -123,8 +123,8 @@ extern "C" {
 void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
 uint8_t siot_mesh_get_link( uint16_t link_id, SIOT_MESH_LINK* link );
-uint8_t siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id ); // generates route table updates
-uint8_t siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id );
+void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id ); // generates route table updates
+void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id );
 
 void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
 uint8_t siot_mesh_at_root_find_best_route( uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
