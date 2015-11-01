@@ -378,7 +378,11 @@ void siot_mesh_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val*
 		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
 		if ( resend.checksum == checksum )
+		{
+			if ( resend.packet_h != MEMORY_HANDLE_INVALID )
+				release_memory_handle( resend.packet_h );
 			gap += sizeof( MESH_PENDING_RESENDS );
+		}
 		else
 			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
 	}
@@ -409,7 +413,11 @@ void siot_mesh_remove_resend_task_by_device_id( uint16_t target_id, const sa_tim
 		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
 		if ( resend.target_id == target_id )
+		{
+			if ( resend.packet_h != MEMORY_HANDLE_INVALID )
+				release_memory_handle( resend.packet_h );
 			gap += sizeof( MESH_PENDING_RESENDS );
+		}
 		else
 			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
 	}
