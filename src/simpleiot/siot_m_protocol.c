@@ -1137,7 +1137,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// LAST-HOP
 				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
-				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
+				ZEPTO_DEBUG_ASSERT( last_hop_id != 0 ); // any but ROOT
 
 				// Target-Address
 				header = zepto_parse_encoded_uint16( &po );
