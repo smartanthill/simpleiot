@@ -69,7 +69,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 INLINE void zepto_memset( void* dest, uint8_t val, uint16_t cnt )
 {
-	uint8_t i;
+	uint16_t i;
 	for ( i=0; i<cnt; i++ )
 		((uint8_t*)dest)[i] = val;
 }

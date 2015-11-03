@@ -142,23 +142,39 @@ uint8_t siot_mesh_add_link( SIOT_MESH_LINK* link )
 {
 	uint16_t i;
 	uint16_t link_id = link->LINK_ID;
+	if ( siot_mesh_link_table_size && siot_mesh_link_table[0].LINK_ID > link_id )
+	{
+		if ( siot_mesh_link_table_size == SIOT_MESH_LINK_TABLE_SIZE_MAX )
+			return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
+		ZEPTO_MEMMOV( siot_mesh_link_table + 1, siot_mesh_link_table, sizeof(SIOT_MESH_LINK) * siot_mesh_link_table_size );
+		ZEPTO_MEMCPY( siot_mesh_link_table, link, sizeof(SIOT_MESH_LINK) );
+		siot_mesh_link_table_size++;
+		return SIOT_MESH_RET_OK;
+	}
 	for ( i=0; i<siot_mesh_link_table_size; i++ )
 	{
 		if ( siot_mesh_link_table[i].LINK_ID < link_id )
 			continue;
-		if ( siot_mesh_link_table[i].LINK_ID == link_id ) // found
+		if ( siot_mesh_link_table[i].LINK_ID == link_id ) // found; update
 		{
 			ZEPTO_MEMCPY( siot_mesh_link_table + i, link, sizeof(SIOT_MESH_LINK) );
 			return SIOT_MESH_RET_OK;
 		}
-		break;
+		else // greater, must be inserted after the current one
+		{
+			if ( siot_mesh_link_table_size == SIOT_MESH_LINK_TABLE_SIZE_MAX )
+				return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
+			ZEPTO_MEMMOV( siot_mesh_link_table + i + 1, siot_mesh_link_table + i, sizeof(SIOT_MESH_LINK) * ( siot_mesh_link_table_size - i ) );
+			ZEPTO_MEMCPY( siot_mesh_link_table + i, link, sizeof(SIOT_MESH_LINK) );
+			siot_mesh_link_table_size++;
+			return SIOT_MESH_RET_OK;
+		}
 	}
 	// as we are here, the entry does not exist at all, and we have to add it rather than modify existing
 	if ( siot_mesh_link_table_size == SIOT_MESH_LINK_TABLE_SIZE_MAX )
 		return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
 
-	ZEPTO_MEMMOV( siot_mesh_link_table + i + 1, siot_mesh_link_table + i, sizeof(SIOT_MESH_LINK) * ( siot_mesh_link_table_size - i ) );
-	ZEPTO_MEMCPY( siot_mesh_link_table + i, link, sizeof(SIOT_MESH_LINK) );
+	ZEPTO_MEMCPY( siot_mesh_link_table + siot_mesh_link_table_size, link, sizeof(SIOT_MESH_LINK) );
 	siot_mesh_link_table_size++;
 	return SIOT_MESH_RET_OK;
 }
@@ -192,6 +208,16 @@ uint8_t siot_mesh_delete_route( uint16_t target_id )
 uint8_t siot_mesh_add_route( uint16_t target_id, uint16_t link_id )
 {
 	uint16_t i;
+	if ( siot_mesh_route_table_size && siot_mesh_route_table[0].TARGET_ID > target_id )
+	{
+		if ( siot_mesh_route_table_size == SIOT_MESH_ROUTE_TABLE_SIZE_MAX )
+			return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
+		ZEPTO_MEMMOV( siot_mesh_route_table + 1, siot_mesh_route_table, sizeof(SIOT_MESH_ROUTE) * siot_mesh_route_table_size );
+		siot_mesh_route_table[0].TARGET_ID = target_id;
+		siot_mesh_route_table[0].LINK_ID = link_id;
+		siot_mesh_route_table_size++;
+		return SIOT_MESH_RET_OK;
+	}
 	for ( i=0; i<siot_mesh_route_table_size; i++ )
 	{
 		if ( siot_mesh_route_table[i].TARGET_ID < target_id )
@@ -201,15 +227,24 @@ uint8_t siot_mesh_add_route( uint16_t target_id, uint16_t link_id )
 			siot_mesh_route_table[i].LINK_ID = link_id;
 			return SIOT_MESH_RET_OK;
 		}
+		else
+		{
+			if ( siot_mesh_route_table_size == SIOT_MESH_ROUTE_TABLE_SIZE_MAX )
+				return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
+			ZEPTO_MEMMOV( siot_mesh_route_table + i + 1, siot_mesh_route_table + i, sizeof(SIOT_MESH_ROUTE) * ( siot_mesh_route_table_size - i ) );
+			siot_mesh_route_table[i].TARGET_ID = target_id;
+			siot_mesh_route_table[i].LINK_ID = link_id;
+			siot_mesh_route_table_size++;
+			return SIOT_MESH_RET_OK;
+		}
 		break;
 	}
 	// as we are here, the entry does not exist at all, and we have to add it rather than modify existing
 	if ( siot_mesh_route_table_size == SIOT_MESH_ROUTE_TABLE_SIZE_MAX )
 		return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
 
-	ZEPTO_MEMMOV( siot_mesh_route_table + i + 1, siot_mesh_route_table + i, sizeof(SIOT_MESH_ROUTE) * ( siot_mesh_route_table_size - i ) );
-	siot_mesh_route_table[i].TARGET_ID = target_id;
-	siot_mesh_route_table[i].LINK_ID = link_id;
+	siot_mesh_route_table[siot_mesh_route_table_size].TARGET_ID = target_id;
+	siot_mesh_route_table[siot_mesh_route_table_size].LINK_ID = link_id;
 	siot_mesh_route_table_size++;
 	return SIOT_MESH_RET_OK;
 }
@@ -282,7 +317,7 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, uint16_t* target_id, co
 	sa_time_val oldest_time_point;
 	sa_hal_time_val_copy_from( &oldest_time_point, currt );
 
-	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER ) )
+	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER ) == 0 )
 		return SIOT_MESH_RET_RESEND_TASK_NONE_EXISTS;
 
 	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
@@ -291,7 +326,7 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, uint16_t* target_id, co
 			break;
 		if ( it_oldest == (uint8_t)(-1) )
 		{
-			if ( sa_hal_time_val_is_less_eq( &(resend.next_resend_time), &oldest_time_point ) ) // used slot is yet older
+			if ( sa_hal_time_val_is_less_eq( &(resend.next_resend_time), &oldest_time_point ) ) // used slot is older than current time
 			{
 				sa_hal_time_val_copy_from( &oldest_time_point, &(resend.next_resend_time) );
 				it_oldest = it;
@@ -314,7 +349,8 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, uint16_t* target_id, co
 		{
 			if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 				break;
-			sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+			bool ret = sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+			ZEPTO_DEBUG_ASSERT( ret ); // non-zero time indeed remains
 		}
 		return SIOT_MESH_RET_RESEND_TASK_NOT_NOW;
 	}
@@ -327,7 +363,7 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, uint16_t* target_id, co
 	*target_id = resend.target_id;
 	zepto_parser_free_memory( packet );
 	zepto_copy_request_to_response_of_another_handle( resend.packet_h, packet );
-	zepto_response_to_request( packet );
+//	zepto_response_to_request( packet );
 
 	if ( final_in_seq ) // erase resend task
 	{
@@ -352,11 +388,14 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, uint16_t* target_id, co
 	}
 
 	// now we calculate remaining time for only actually remaining tasks
+	ZEPTO_DEBUG_PRINTF_1( "\nRequest tasks @siot_mesh_get_resend_task():\n" );
 	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
 	{
 		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
-		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+		bool ret = sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+//		ZEPTO_DEBUG_ASSERT( ret ); // non-zero time indeed remains
+		ZEPTO_DEBUG_PRINTF_6( "%04x%04x: target: %d, packet_h:%d, resend_cnt: %d\n", resend.next_resend_time.high_t, resend.next_resend_time.low_t, resend.target_id, resend.packet_h, resend.resend_cnt );
 	}
 
 	return final_in_seq ? SIOT_MESH_RET_RESEND_TASK_FINAL : SIOT_MESH_RET_RESEND_TASK_INTERM;
@@ -369,13 +408,13 @@ void siot_mesh_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val*
 	sa_time_val oldest_time_point;
 	sa_hal_time_val_copy_from( &oldest_time_point, currt );
 
-	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER ) )
+	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER ) == 0 )
 		return;
 
 	gap = 0;
 	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
 	{
-		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
 		if ( resend.checksum == checksum )
 		{
@@ -384,16 +423,18 @@ void siot_mesh_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val*
 			gap += sizeof( MESH_PENDING_RESENDS );
 		}
 		else
-			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset - gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
 	}
 	if ( gap )	zepto_memman_trim_locally_generated_data_at_right( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, gap );
 
 	// now we calculate remaining time for only actually remaining tasks
+	ZEPTO_DEBUG_PRINTF_1( "\nRequest tasks @siot_mesh_remove_resend_task_by_hash():\n" );
 	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
 	{
 		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
 		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+		ZEPTO_DEBUG_PRINTF_6( "%04x%04x: target: %d, packet_h:%d, resend_cnt: %d\n", resend.next_resend_time.high_t, resend.next_resend_time.low_t, resend.target_id, resend.packet_h, resend.resend_cnt );
 	}
 }
 
@@ -404,13 +445,13 @@ void siot_mesh_remove_resend_task_by_device_id( uint16_t target_id, const sa_tim
 	sa_time_val oldest_time_point;
 	sa_hal_time_val_copy_from( &oldest_time_point, currt );
 
-	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER ) )
+	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER ) == 0 )
 		return;
 
 	gap = 0;
 	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
 	{
-		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset + gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
 		if ( resend.target_id == target_id )
 		{
@@ -419,16 +460,18 @@ void siot_mesh_remove_resend_task_by_device_id( uint16_t target_id, const sa_tim
 			gap += sizeof( MESH_PENDING_RESENDS );
 		}
 		else
-			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset - gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
 	}
 	if ( gap )	zepto_memman_trim_locally_generated_data_at_right( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, gap );
 
 	// now we calculate remaining time for only actually remaining tasks
+	ZEPTO_DEBUG_PRINTF_1( "\nRequest tasks @siot_mesh_remove_resend_task_by_device_id():\n" );
 	for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
 	{
 		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
 		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+		ZEPTO_DEBUG_PRINTF_6( "%04x%04x: target: %d, packet_h:%d, resend_cnt: %d\n", resend.next_resend_time.high_t, resend.next_resend_time.low_t, resend.target_id, resend.packet_h, resend.resend_cnt );
 	}
 }
 #else // USED_AS_RETRANSMITTER
@@ -2247,17 +2290,20 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 				siot_mesh_remove_resend_task_by_device_id( device_id, currt, &(wf->wait_time) );
 				uint16_t bus_id_to_use = 0;
 				// TODO: proper action
-//				siot_mesh_form_packet_from_santa( mem_h, device_id, bus_id_to_use );
+				/*TODO: it should be forming to-santa here*/siot_mesh_form_unicast_packet( mem_h, *link_id, device_id, true, &checksum );
+//				siot_mesh_form_packet_to_santa( mem_h, device_id, bus_id_to_use );
 			}
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 		case SIOT_MESH_RET_RESEND_TASK_FINAL:
 		{
+			uint16_t checksum;
 //			siot_mesh_remove_link_to_target( device_id );
 			siot_mesh_delete_route( device_id );
 			uint16_t bus_id_to_use = 0;
 			// TODO: proper action
+			/*TODO: it should be forming to-santa here*/siot_mesh_form_unicast_packet( mem_h, *link_id, device_id, true, &checksum );
 //			siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
