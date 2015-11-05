@@ -758,6 +758,10 @@ void siot_mesh_form_ack_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_
 
 void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t bus_id_used )
 {
+	// ASSUMPTIONS OF THE CURRENT IMPLEMENTATION
+	// 1. As seen from this function parameters in the current implementation we assume only one device at a time to be found
+	// 2. We also assume that the Root has a single bus
+
 	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
 
@@ -768,10 +772,10 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, 
 	zepto_parser_encode_and_append_uint16( mem_h, header );
 
 	// LAST-HOP
-	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // TODO: is it a self-ID? Then for Client it is 0, and some unique velue for other devices. SOURCE???
+	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // ROOT
 
 	// LAST-HOP-BUS-ID
-	zepto_parser_encode_and_append_uint16( mem_h, bus_id_used ); // TODO: is it a self-ID? Then for Client it is 0, and some unique velue for other devices. SOURCE???
+	zepto_parser_encode_and_append_uint16( mem_h, bus_id_used );
 
 	// REQUEST-ID
 	static uint16_t rq_id = 0; // REQUEST-ID
@@ -781,13 +785,10 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, 
 	// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
 
 	// MULTIPLE-RETRANSMITTING-ADDRESSES 
-	// just adding terminator...
-	header = 1 | 0; // TODO: Check that this interpretation is correct !!!!!!!!!!!!!
-	zepto_parser_encode_and_append_uint16( mem_h, header );
+	uint16_t retransmitter_count = write_retransmitter_list_for_from_santa_packet( mem_h );
 
 	// BROADCAST-BUS-TYPE-LIST
-	// TODO: what should we add here?
-	zepto_write_uint8( mem_h, 0 ); // list terminator
+	write_bus_types_for_device_for_from_santa_packet( mem_h, target_id );
 
 	// Target-Address
 	header = 0 | ( target_id << 1 ); // NODE-ID, no more data
@@ -1698,7 +1699,6 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// LAST-HOP
 				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
-				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// Target-Address
 				header = zepto_parse_encoded_uint16( &po );
@@ -1716,6 +1716,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// ACK-CHESKSUM
 				uint16_t ack_checksum = zepto_parse_uint8( &po );
 				ack_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+
+				ZEPTO_DEBUG_PRINTF_4( "SIOT_MESH_ACK_NACK_PACKET: LAST-HOP: %d, target_id: %d, ack_checksum: 0x%04x\n", last_hop_id, target_id, ack_checksum );
 
 				// HEADER-CHECKSUM
 				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
@@ -1802,11 +1804,11 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// LAST-HOP
 				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
-				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
+//				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// LAST-HOP-BUS-ID
 				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po );
-				ZEPTO_DEBUG_ASSERT( last_hop_bus_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
+//				ZEPTO_DEBUG_ASSERT( last_hop_bus_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// REQUEST-ID
 				uint16_t request_id = zepto_parse_encoded_uint16( &po );
@@ -1814,7 +1816,21 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
 
 				// MULTIPLE-RETRANSMITTING-ADDRESSES 
+				// At this point we should quickly go through and to check only whether we're in the list (if we're a retransmitter), or just to skip this part, if we're a terminating device
+#ifdef USED_AS_RETRANSMITTER
+				bool we_are_in_the_list_of_retransmitters = false;
+#endif // USED_AS_RETRANSMITTER
 				header = zepto_parse_encoded_uint16( &po );
+				while ( header != 0 )
+				{
+					header = zepto_parse_encoded_uint16( &po );
+#ifdef USED_AS_RETRANSMITTER
+					if ( header >> 1 )
+				we_are_in_the_list_of_retransmitters = true;
+#endif // USED_AS_RETRANSMITTER
+				}
+				// TODO: at this place a full list of intended retransmitters must be retrieved
+				//       as a testing sample here we assume that the only potential candidate is with ID=1
 				ZEPTO_DEBUG_ASSERT( header == 1 ); // just terminator is expected in present implementation
 
 				// BROADCAST-BUS-TYPE-LIST
@@ -1831,15 +1847,20 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				header = zepto_parse_encoded_uint16( &po );
 				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
 				uint16_t target_id = header >> 1;
+#ifdef USED_AS_RETRANSMITTER
+#else // USED_AS_RETRANSMITTER
 				if ( target_id != DEVICE_SELF_ID )
 				{
 					ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (from Santa); ignored (self id: %d)\n", target_id, DEVICE_SELF_ID );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
+#endif // USED_AS_RETRANSMITTER
 
 				// OPTIONAL-TARGET-REPLY-DELAY
 
 				// OPTIONAL-PAYLOAD-SIZE
+
+				ZEPTO_DEBUG_PRINTF_3( "SIOT_MESH_FROM_SANTA_DATA_PACKET: LAST-HOP: %d, target_id: %d\n", last_hop_id, target_id );
 
 				// HEADER-CHECKSUM
 				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
@@ -1883,35 +1904,57 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// Now we can assume that we have received a quite good packet, and we will process it further
 
-				// now we can add this packet to the list of last hop's data
-				// TODO: check TARGET-COLLECT-LAST-HOPS flag!!!
-				ZEPTO_DEBUG_ASSERT( ( signal_level >> 4 ) == 0 ); // 4 bits
-				ZEPTO_DEBUG_ASSERT( ( error_cnt >> 3 ) == 0 ); // 3 bits; TODO: what we do in case of more errors?
+				// NOTE: we can appear here for two reasons: 
+				//       we're a terminating device, and the packet is "for us", and
+				//		 we're a retransmitter, and we should further analyze the packet
 
-				// is it a packet of the same request id?
-				bool one_of_recent_requests = false;
-				if ( last_requests[0].ineffect && request_id == last_requests[0].rq_id )
+#ifdef USED_AS_RETRANSMITTER
+				if ( target_id == DEVICE_SELF_ID )
 				{
-					one_of_recent_requests = true;
-					siot_mesh_add_last_hop_data( 0, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
-					*mesh_val = 0;
-				}
-				else if ( last_requests[1].ineffect && request_id == last_requests[1].rq_id )
+#else
+				ZEPTO_DEBUG_ASSERT( target_id == DEVICE_SELF_ID );
 				{
-					one_of_recent_requests = true;
-					siot_mesh_add_last_hop_data( 1, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
-					*mesh_val = 1;
-				}
-				else
-				{
-					ZEPTO_DEBUG_ASSERT( last_requests[0].ineffect == false || last_requests[1].ineffect == false );
-					*mesh_val = 0;
-					if ( last_requests[0].ineffect )
+#endif
+					// now we can add this packet to the list of last hop's data
+					// TODO: check TARGET-COLLECT-LAST-HOPS flag!!!
+					ZEPTO_DEBUG_ASSERT( ( signal_level >> 4 ) == 0 ); // 4 bits
+					ZEPTO_DEBUG_ASSERT( ( error_cnt >> 3 ) == 0 ); // 3 bits; TODO: what we do in case of more errors?
+
+					// is it a packet of the same request id?
+					bool one_of_recent_requests = false;
+					if ( last_requests[0].ineffect && request_id == last_requests[0].rq_id )
+					{
+						one_of_recent_requests = true;
+						siot_mesh_add_last_hop_data( 0, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
+						*mesh_val = 0;
+					}
+					else if ( last_requests[1].ineffect && request_id == last_requests[1].rq_id )
+					{
+						one_of_recent_requests = true;
+						siot_mesh_add_last_hop_data( 1, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 						*mesh_val = 1;
-					siot_mesh_init_last_hop_data_storage( *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
-				}
+					}
+					else
+					{
+						ZEPTO_DEBUG_ASSERT( last_requests[0].ineffect == false || last_requests[1].ineffect == false );
+						*mesh_val = 0;
+						if ( last_requests[0].ineffect )
+							*mesh_val = 1;
+						siot_mesh_init_last_hop_data_storage( *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
+					}
 
-				return SIOT_MESH_RET_PASS_TO_PROCESS;
+					return SIOT_MESH_RET_PASS_TO_PROCESS;
+				}
+#ifdef USED_AS_RETRANSMITTER
+				if ( TTL == 0 )
+				{
+					return SIOT_MESH_RET_OK;
+				}
+				TTL--;
+/*				if ( next_hop == DEVICE_SELF_ID ) // through us; so let's forward it (it is somehow similar to sending our own packets; just kindle re-assemble the packet received updating certain fields0
+				{
+				}*/
+#endif
 				break;
 			}
 			default:
@@ -1952,7 +1995,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		}
 #endif // USED_AS_RETRANSMITTER
 
-		// uint16_t TTL = header >> 5;
+		uint16_t TTL = header >> 5;
 		// now we're done with the header; proceeding to optional headers...
 		while ( extra_headers_present )
 		{
@@ -2055,7 +2098,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				return SIOT_MESH_RET_PASS_TO_PROCESS;
 			}
-			else if ( next_hop == DEVICE_SELF_ID ) // through us; so let's forward it (it is somehow similar to sending our own packets; just kindle re-assemble the packet received updating certain fields0
+			if ( next_hop == DEVICE_SELF_ID ) // through us; so let's forward it (it is somehow similar to sending our own packets; just kindle re-assemble the packet received updating certain fields0
 			{
 				if ( ack_requested )
 				{
@@ -2213,10 +2256,6 @@ void siot_mesh_form_unicast_packet( MEMORY_HANDLE mem_h, uint16_t link_id, uint1
 	uint16_t header;
 	SIOT_MESH_LINK link;
 	uint8_t ret_code = siot_mesh_get_link( link_id, &link );
-if ( ret_code != SIOT_MESH_RET_OK )
-{
-	ret_code = ret_code;
-}
 
 	ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK ); // we do not expect that being here we have an invalid link_id
 	ZEPTO_DEBUG_ASSERT( link.LINK_ID == link_id );

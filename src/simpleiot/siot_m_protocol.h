@@ -121,6 +121,9 @@ extern "C" {
 
 
 void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
+uint8_t write_bus_types_for_device_for_from_santa_packet( MEMORY_HANDLE mem_h, uint16_t device_id );
+uint16_t write_retransmitter_list_for_from_santa_packet( MEMORY_HANDLE mem_h );
+
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
 uint8_t siot_mesh_get_link( uint16_t link_id, SIOT_MESH_LINK* link );
 void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id ); // generates route table updates
