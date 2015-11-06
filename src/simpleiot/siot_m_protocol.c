@@ -1660,6 +1660,62 @@ void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, uint1
 }
 #endif // USED_AS_RETRANSMITTER
 
+typedef struct _SIOT_MESH_FROM_SANTA_PRETASK
+{
+	MEMORY_HANDLE mem_h;
+} SIOT_MESH_FROM_SANTA_PRETASK;
+
+typedef struct _SIOT_MESH_FROM_SANTA_PRETASK_HOLDER
+{
+	MEMORY_HANDLE holder_h;
+	uint16_t obj_cnt;
+} SIOT_MESH_FROM_SANTA_PRETASK_HOLDER;
+
+void siot_mesh_init_from_santa_pretask_holder( SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder )
+{
+	holder->holder_h = acquire_memory_handle();
+	holder->obj_cnt = 0;
+	ZEPTO_DEBUG_ASSERT( holder->holder_h != MEMORY_HANDLE_INVALID );
+}
+
+void siot_mesh_release_from_santa_pretask_holder( SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder )
+{
+	release_memory_handle( holder->holder_h );
+}
+
+void siot_mesh_add_from_santa_pretask( SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder, SIOT_MESH_FROM_SANTA_PRETASK* pretask )
+{
+	zepto_memman_append_locally_generated_data( holder->holder_h, sizeof(SIOT_MESH_FROM_SANTA_PRETASK), pretask );
+}
+
+uint16_t siot_mesh_add_from_santa_pretask_holder_get_count( const SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder )
+{
+#ifdef SA_DEBUG
+	ZEPTO_DEBUG_ASSERT( holder->holder_h != MEMORY_HANDLE_INVALID );
+	uint16_t data_sz = zepto_memman_get_currently_allocated_size_for_locally_generated_data( holder->holder_h );
+	ZEPTO_DEBUG_ASSERT( ( (uint8_t*)( ((SIOT_MESH_FROM_SANTA_PRETASK*)0) + holder->obj_cnt ) ) - ( (uint8_t*)( (SIOT_MESH_FROM_SANTA_PRETASK*)0) ) ==  data_sz );
+#endif // SA_DEBUG
+	return holder->obj_cnt;
+}
+
+bool siot_mesh_add_from_santa_pretask_holder_get_pretask( const SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder, uint8_t idx, SIOT_MESH_FROM_SANTA_PRETASK* pretask )
+{
+	if ( idx >= holder->obj_cnt )
+		return false;
+	zepto_memman_read_locally_generated_data_by_offset( holder->holder_h, idx * sizeof(SIOT_MESH_FROM_SANTA_PRETASK), sizeof(SIOT_MESH_FROM_SANTA_PRETASK), pretask );
+	return true;
+}
+
+bool siot_mesh_add_from_santa_pretask_holder_update_pretask( const SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder, uint8_t idx, SIOT_MESH_FROM_SANTA_PRETASK* pretask )
+{
+	if ( idx >= holder->obj_cnt )
+		return false;
+	zepto_memman_write_locally_generated_data_by_offset( holder->holder_h, idx * sizeof(SIOT_MESH_FROM_SANTA_PRETASK), sizeof(SIOT_MESH_FROM_SANTA_PRETASK), pretask );
+	return true;
+}
+
+
+
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt )
 {
 	parser_obj po, po1, po2;
@@ -1768,6 +1824,219 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				return SIOT_MESH_RET_OK;
 			}
+#ifdef USED_AS_RETRANSMITTER
+			case SIOT_MESH_FROM_SANTA_DATA_PACKET:
+			{
+				// Being optimistic regarding packet integrity we declare a number of parser objects denoting 
+				// starting (and sometimes ending0 positions of certain parts of the packet to avoid double parsing
+				parser_obj po_target_start, po_target_end;
+				parser_obj po_bustype_start, po_bustype_end;
+				parser_obj po_payload_start, po_payload_end;
+				parser_obj po_headers_end; // header and optional headers
+				parser_obj po_retransmitter_start;
+
+				// WARNING: we should not do any irreversible changes until checksums are virified; 
+				//          thus, until that point all data should only be locally collected, and applied only after checksum verification (or do two passes)
+				bool more_packets_follow = false; // MORE-PACKETS-FOLLOW
+				bool target_collect_last_hops = false; // TARGET-COLLECT-LAST-HOPS
+				bool explicit_time_scheduling = false; // EXPLICIT-TIME-SCHEDULING
+				bool is_probe = false; // IS-PROBE
+
+				// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
+				bool extra_headers_present = ( header >> 4 ) & 0x1;
+				uint16_t TTL = header >> 5;
+				// now we're done with the header; proceeding to optional headers...
+				while ( extra_headers_present )
+				{
+					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'FROM-SANTA\' packet are not yet implemented" );
+					header = zepto_parse_encoded_uint16( &po );
+					extra_headers_present = header & 0x1;
+					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
+					switch ( generic_flags )
+					{
+						case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
+						{
+							more_packets_follow = header >> 3;
+							target_collect_last_hops = header >> 4;
+							explicit_time_scheduling = header >> 5;
+							is_probe = header >> 7;
+							break;
+						}
+						case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
+						case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
+						case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
+						{
+							ZEPTO_DEBUG_ASSERT( NULL == "Error: not implemented\n" );
+							break;
+						}
+					}
+				}
+
+				ZEPTO_DEBUG_ASSERT( !more_packets_follow ); // not yet implemented
+				ZEPTO_DEBUG_ASSERT( !explicit_time_scheduling ); // not yet implemented
+				ZEPTO_DEBUG_ASSERT( !is_probe ); // not yet implemented
+
+				zepto_parser_init_by_parser( &po_headers_end, &po );
+
+
+				// LAST-HOP
+				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
+//				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
+
+				// LAST-HOP-BUS-ID
+				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po );
+//				ZEPTO_DEBUG_ASSERT( last_hop_bus_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
+
+				// REQUEST-ID
+				uint16_t request_id = zepto_parse_encoded_uint16( &po );
+
+				// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
+
+				// MULTIPLE-RETRANSMITTING-ADDRESSES 
+				// At this point we should quickly go through and to check only whether we're in the list (if we're a retransmitter), or just to skip this part, if we're a terminating device
+				zepto_parser_init_by_parser( &po_retransmitter_start, &po );
+
+				bool we_are_in_the_list_of_retransmitters = false;
+				uint16_t retransmitter_cnt = 0;
+				header = zepto_parse_encoded_uint16( &po );
+				while ( header != 0 )
+				{
+					if ( (header >> 1) == DEVICE_SELF_ID )
+						we_are_in_the_list_of_retransmitters = true;
+					else
+						retransmitter_cnt ++;
+					header = zepto_parse_encoded_uint16( &po );
+				}
+
+				// BROADCAST-BUS-TYPE-LIST
+				// we will use it in two ways: by adding/copying to outgoing packets (if any), and practically, if we're in the list of retransmitters
+				zepto_parser_init_by_parser( &po_bustype_start, &po );
+
+				uint8_t bus_type = zepto_parse_uint8( &po );
+				while ( bus_type != 0 ) // 0 is a terminator
+				{
+					bus_type = zepto_parse_uint8( &po );
+				}
+
+				zepto_parser_init_by_parser( &po_bustype_end, &po );
+
+				// Multiple-Target-Addresses
+				bool among_targets = false;
+				zepto_parser_init_by_parser( &po_target_start, &po );
+
+				header = zepto_parse_encoded_uint16( &po );
+				ZEPTO_DEBUG_PRINTF_2( "SIOT_MESH_FROM_SANTA_DATA_PACKET: LAST-HOP: %d", last_hop_id );
+				while ( header != 0 ) // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
+				{
+					uint16_t target_id = header >> 1;
+					ZEPTO_DEBUG_PRINTF_2( ", target_id: %d", target_id );
+					if ( target_id == DEVICE_SELF_ID )
+						among_targets = true;
+					header = zepto_parse_encoded_uint16( &po );
+				}
+				ZEPTO_DEBUG_PRINTF_1( "\n" );
+
+				zepto_parser_init_by_parser( &po_target_end, &po );
+
+				// OPTIONAL-TARGET-REPLY-DELAY
+
+				// OPTIONAL-PAYLOAD-SIZE
+
+
+				// HEADER-CHECKSUM
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
+				uint16_t header_reported_checksum = zepto_parse_uint8( &po );
+				header_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+				zepto_parser_init_by_parser( &po1, &po );
+
+
+				if ( actual_checksum != header_reported_checksum ) // we have not received even a header
+				{
+					// TODO: cleanup, if necessary
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
+
+				// payload and FULL-CHECKSUM
+				zepto_parser_init_by_parser( &po_payload_start, &po );
+
+				bool second_checksum_ok;
+				uint16_t packet_reported_checksum;
+				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				if ( remaining_size >= 2 )
+				{
+					parser_obj rq_start_po;
+					zepto_parser_init_by_parser( &po2, &po );
+					zepto_parser_init_by_parser( &rq_start_po, &po );
+					zepto_parse_skip_block( &po, remaining_size - 2 );
+					zepto_parser_init_by_parser( &po_payload_end, &po ); // payload end
+					zepto_append_part_of_request_to_response( mem_h, &po2, &po );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
+					packet_reported_checksum = zepto_parse_uint8( &po );
+					packet_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+					second_checksum_ok = actual_checksum == packet_reported_checksum;
+				}
+				else
+				{
+					second_checksum_ok = false;
+				}
+
+				if ( !second_checksum_ok )
+				{
+					// TODO: we have only a partially received packet; prepare NAK
+					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
+					return SIOT_MESH_RET_PASS_TO_SEND;
+				}
+
+				// Now we can assume that we have received a quite good packet, and we will process it further
+
+				// NOTE: we can appear here for two reasons: 
+				//       we're a terminating device, and the packet is "for us", and
+				//		 we're a retransmitter, and we should further analyze the packet
+
+				if ( among_targets )
+				{
+					// now we can add this packet to the list of last hop's data
+					// TODO: check TARGET-COLLECT-LAST-HOPS flag!!!
+					ZEPTO_DEBUG_ASSERT( ( signal_level >> 4 ) == 0 ); // 4 bits
+					ZEPTO_DEBUG_ASSERT( ( error_cnt >> 3 ) == 0 ); // 3 bits; TODO: what we do in case of more errors?
+
+					// is it a packet of the same request id?
+					bool one_of_recent_requests = false;
+					if ( last_requests[0].ineffect && request_id == last_requests[0].rq_id )
+					{
+						one_of_recent_requests = true;
+						siot_mesh_add_last_hop_data( 0, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
+						*mesh_val = 0;
+					}
+					else if ( last_requests[1].ineffect && request_id == last_requests[1].rq_id )
+					{
+						one_of_recent_requests = true;
+						siot_mesh_add_last_hop_data( 1, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
+						*mesh_val = 1;
+					}
+					else
+					{
+						ZEPTO_DEBUG_ASSERT( last_requests[0].ineffect == false || last_requests[1].ineffect == false );
+						*mesh_val = 0;
+						if ( last_requests[0].ineffect )
+							*mesh_val = 1;
+						siot_mesh_init_last_hop_data_storage( *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
+					}
+
+					return SIOT_MESH_RET_PASS_TO_PROCESS;
+				}
+				if ( TTL == 0 )
+				{
+					return SIOT_MESH_RET_OK;
+				}
+				TTL--;
+
+/*				if ( next_hop == DEVICE_SELF_ID ) // through us; so let's forward it (it is somehow similar to sending our own packets; just kindle re-assemble the packet received updating certain fields0
+				{
+				}*/
+				break;
+			}
+#else // USED_AS_RETRANSMITTER
 			case SIOT_MESH_FROM_SANTA_DATA_PACKET:
 			{
 				// WARNING: we should not do any irreversible changes until checksums are virified; 
@@ -1826,17 +2095,10 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// MULTIPLE-RETRANSMITTING-ADDRESSES 
 				// At this point we should quickly go through and to check only whether we're in the list (if we're a retransmitter), or just to skip this part, if we're a terminating device
-#ifdef USED_AS_RETRANSMITTER
-				bool we_are_in_the_list_of_retransmitters = false;
-#endif // USED_AS_RETRANSMITTER
 				header = zepto_parse_encoded_uint16( &po );
 				while ( header != 0 )
 				{
 					header = zepto_parse_encoded_uint16( &po );
-#ifdef USED_AS_RETRANSMITTER
-					if ( header >> 1 )
-				we_are_in_the_list_of_retransmitters = true;
-#endif // USED_AS_RETRANSMITTER
 				}
 				// TODO: at this place a full list of intended retransmitters must be retrieved
 				//       as a testing sample here we assume that the only potential candidate is with ID=1
@@ -1856,14 +2118,11 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				header = zepto_parse_encoded_uint16( &po );
 				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
 				uint16_t target_id = header >> 1;
-#ifdef USED_AS_RETRANSMITTER
-#else // USED_AS_RETRANSMITTER
 				if ( target_id != DEVICE_SELF_ID )
 				{
 					ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (from Santa); ignored (self id: %d)\n", target_id, DEVICE_SELF_ID );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
-#endif // USED_AS_RETRANSMITTER
 
 				// OPTIONAL-TARGET-REPLY-DELAY
 
@@ -1917,13 +2176,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				//       we're a terminating device, and the packet is "for us", and
 				//		 we're a retransmitter, and we should further analyze the packet
 
-#ifdef USED_AS_RETRANSMITTER
-				if ( target_id == DEVICE_SELF_ID )
-				{
-#else
 				ZEPTO_DEBUG_ASSERT( target_id == DEVICE_SELF_ID );
 				{
-#endif
 					// now we can add this packet to the list of last hop's data
 					// TODO: check TARGET-COLLECT-LAST-HOPS flag!!!
 					ZEPTO_DEBUG_ASSERT( ( signal_level >> 4 ) == 0 ); // 4 bits
@@ -1954,18 +2208,9 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 					return SIOT_MESH_RET_PASS_TO_PROCESS;
 				}
-#ifdef USED_AS_RETRANSMITTER
-				if ( TTL == 0 )
-				{
-					return SIOT_MESH_RET_OK;
-				}
-				TTL--;
-/*				if ( next_hop == DEVICE_SELF_ID ) // through us; so let's forward it (it is somehow similar to sending our own packets; just kindle re-assemble the packet received updating certain fields0
-				{
-				}*/
-#endif
 				break;
 			}
+#endif // USED_AS_RETRANSMITTER
 			default:
 			{
 				ZEPTO_DEBUG_PRINTF_2( "Packet type %d received; not expected or not implemented\n", (header >> 1) & 0x7 );
