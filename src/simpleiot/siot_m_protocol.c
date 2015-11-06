@@ -755,7 +755,7 @@ void siot_mesh_form_ack_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_
 		// OPTIONAL-DELAY-LEFT
 	}
 }
-
+#if 0
 void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t bus_id_used )
 {
 	// ASSUMPTIONS OF THE CURRENT IMPLEMENTATION
@@ -815,6 +815,7 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, 
 	zepto_write_uint8( mem_h, (uint8_t)checksum );
 	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 }
+#endif // 0
 
 void siot_mesh_form_unicast_packet( uint16_t target_id, MEMORY_HANDLE mem_h, uint16_t link_id, bool request_ack, uint16_t* packet_checksum )
 {
@@ -889,7 +890,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint
 		siot_mesh_at_root_add_resend_task( mem_h, currt, checksum, target_id, &wait_tval );
 		sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &wait_tval );
 
-		return SIOT_MESH_RET_OK;
+		return SIOT_MESH_RET_PASS_TO_SEND;
 	}
 	else
 	{
@@ -900,11 +901,10 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint
 		// TODO: determine which physical links we will use; we will have to iterate over all of them
 		// NOTE: currently we assume that we have a single link with bus_id = 0
 		uint16_t bus_id_to_use = 0;
-		siot_mesh_form_packet_from_santa( mem_h, target_id, bus_id_to_use );
+		siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, target_id, bus_id_to_use );
+
+		return SIOT_MESH_RET_OK;
 	}
-
-
-	return SIOT_MESH_RET_OK;
 }
 
 uint8_t siot_mesh_process_received_tosanta_packet( MEMORY_HANDLE mem_h, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_quality_at_first_receiver, bool payload_present, uint16_t request_id )
@@ -1083,7 +1083,6 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
 
 	uint8_t ret_code = siot_mesh_at_root_get_resend_task( mem_h, currt, device_id, &(wf->wait_time) );
-	zepto_response_to_request( mem_h );
 	switch (ret_code )
 	{
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NONE_EXISTS:
@@ -1091,31 +1090,41 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			break;
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM:
 		{
+			zepto_response_to_request( mem_h );
 			uint16_t checksum;
 			bool route_known = siot_mesh_at_root_target_to_link_id( *device_id, link_id ) == SIOT_MESH_RET_OK;
 			if ( route_known )
 			{
 				siot_mesh_form_unicast_packet( *device_id, mem_h, *link_id, true, &checksum );
+				return SIOT_MESH_RET_PASS_TO_SEND;
 			}
 			else
 			{
 				siot_mesh_at_root_remove_resend_task_by_device_id( *device_id, currt, &(wf->wait_time) );
+				// TODO: determine which physical links we will use; we will have to iterate over all of them
+				// NOTE: currently we assume that we have a single link with bus_id = 0
 				uint16_t bus_id_to_use = 0;
-				siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
+				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id, bus_id_to_use );
+				return SIOT_MESH_RET_OK;
 			}
-			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL:
 		{
+			zepto_response_to_request( mem_h );
 			siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( *device_id );
 			uint16_t bus_id_to_use = 0;
-			//+++++TODO: revise!
-			siot_mesh_form_packet_from_santa( mem_h, *device_id, bus_id_to_use );
-			return SIOT_MESH_RET_PASS_TO_SEND;
+			siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id, bus_id_to_use );
+			return SIOT_MESH_RET_OK;
+			break;
+		}
+		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA:
+		{
+			return SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA;
 			break;
 		}
 	}
+	zepto_parser_free_memory( mem_h );
 
 	static bool route_table_created = false;
 	static bool hop_data_added = false;

@@ -24,7 +24,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #define PLAIN_REPLY_FRAME
 #endif
 
-#ifdef USED_AS_RETRANSMITTER
+#if (defined USED_AS_RETRANSMITTER) || (defined USED_AS_MASTER)
 #define MEMORY_HANDLE_ALLOW_ACQUIRE_RELEASE
 #endif
 
