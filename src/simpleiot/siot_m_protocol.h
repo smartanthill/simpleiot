@@ -59,6 +59,9 @@ typedef struct _SIOT_MESH_LINK
 	uint16_t LINK_DELAY_ERROR; // type is inspired: same section as above
 } SIOT_MESH_LINK;
 
+#define SIOT_MESH_NEXT_HOP_UNDEFINED 0xFFFF
+#define SIOT_MESH_TARGET_UNDEFINED 0xFFFF
+
 // rout table item
 typedef struct _SIOT_MESH_ROUTE
 {
@@ -167,7 +170,7 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 #ifdef USED_AS_RETRANSMITTER
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt, uint16_t* bus_id, uint16_t* ack_bus_id );
 #else // USED_AS_RETRANSMITTER
-uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt, &ack_bus_id );
+uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt, uint16_t* ack_bus_id );
 #endif // USED_AS_RETRANSMITTER
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val );
 uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint8_t mesh_val, uint8_t resend_cnt, uint16_t target_id, uint16_t* bus_id );
