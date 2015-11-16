@@ -340,7 +340,7 @@ uint16_t siot_mesh_calculate_route_table_checksum()
 }
 
 #define MESH_PENDING_RESEND_TYPE_SELF_PACKET 0
-#define MESH_PENDING_RESEND_TYPE_RETRANSMITTED_PACKET 1
+//#define MESH_PENDING_RESEND_TYPE_RETRANSMITTED_PACKET 1
 
 #define SIOT_MESH_RET_RESEND_TASK_NONE_EXISTS 6
 #define SIOT_MESH_RET_RESEND_TASK_NOT_NOW 7
@@ -354,7 +354,7 @@ uint16_t siot_mesh_calculate_route_table_checksum()
 #define MESH_PENDING_RESEND_TYPE_SELF_REPEATED 1
 #define MESH_PENDING_RESEND_TYPE_TRANSIT_UNICAST 2
 
-void siot_mesh_add_resend_task( MEMORY_HANDLE packet, uint8_t type, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, uint16_t bus_id, uint16_t next_hop, sa_time_val* time_to_next_event )
+void siot_mesh_add_resend_task( MEMORY_HANDLE packet/*, uint8_t type*/, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, uint16_t bus_id, uint16_t next_hop, sa_time_val* time_to_next_event )
 {
 	// 1. prepare resend task
 	MESH_PENDING_RESENDS resend;
@@ -373,6 +373,7 @@ void siot_mesh_add_resend_task( MEMORY_HANDLE packet, uint8_t type, const sa_tim
 	{
 		ZEPTO_DEBUG_ASSERT( 0 == "memory deficiency (getting invalid handle) is not considered yet" ); // TODO: consider and implement
 	}
+#if 0
 	resend.type = type;
 	switch ( type )
 	{
@@ -387,6 +388,9 @@ void siot_mesh_add_resend_task( MEMORY_HANDLE packet, uint8_t type, const sa_tim
 			break;
 		}
 	}
+#else // 0
+	zepto_copy_request_to_response_of_another_handle( packet, resend.packet_h );
+#endif
 	zepto_response_to_request( resend.packet_h );
 
 	// 2. add resend task
@@ -426,7 +430,7 @@ void siot_mesh_at_root_add_resend_unicast_task( MEMORY_HANDLE packet, const sa_t
 {
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
-	resend.type = MESH_PENDING_RESEND_FROM_SANTA;
+	resend.type = MESH_PENDING_RESEND_TYPE_TRANSIT_UNICAST;
 	resend.packet_h = packet;
 	resend.bus_id = bus_id;
 	resend.target_id = target_id;
@@ -559,6 +563,10 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* curr
 		}
 		case MESH_PENDING_RESEND_FROM_SANTA:
 		{
+if ( resend.resend_cnt != 1 )
+{
+	resend.resend_cnt = resend.resend_cnt;
+}
 			ZEPTO_DEBUG_ASSERT( resend.resend_cnt == 1 );
 			zepto_parser_free_memory( packet );
 			zepto_copy_response_to_response_of_another_handle( resend.packet_h, packet );
@@ -1146,7 +1154,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint
 
 		// TODO: determine which physical links we will use; we will have to iterate over all of them
 		// NOTE: currently we assume that we have a single link with bus_id = 0
-		zepto_response_to_request( mem_h );
+//		zepto_response_to_request( mem_h );
 		siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, target_id );
 		zepto_parser_free_memory( mem_h );
 
@@ -1349,6 +1357,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			break;
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM:
 		{
+			*device_id = device_or_bus_id;
 			uint16_t link_id;
 			zepto_response_to_request( mem_h );
 			uint16_t checksum;
@@ -1370,6 +1379,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL:
 		{
+			*device_id = device_or_bus_id;
 			zepto_response_to_request( mem_h );
 			siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( *device_id );
 			siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id );
@@ -3692,7 +3702,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 			uint8_t ret_code = siot_mesh_get_link( link_id, &link );
 			ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK ); // we do not expect that being here we have an invalid link_id
 			ZEPTO_DEBUG_ASSERT( link.LINK_ID == link_id );
-			siot_mesh_add_resend_task( mem_h, MESH_PENDING_RESEND_TYPE_SELF_PACKET, currt, checksum, target_id, link.BUS_ID, link.NEXT_HOP, &(wf->wait_time) );
+			siot_mesh_add_resend_task( mem_h/*, MESH_PENDING_RESEND_TYPE_SELF_PACKET*/, currt, checksum, target_id, link.BUS_ID, link.NEXT_HOP, &(wf->wait_time) );
 #else // USED_AS_RETRANSMITTER
 			uint16_t checksum;
 			siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, target_id, true, &checksum );
