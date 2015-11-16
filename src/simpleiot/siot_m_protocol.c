@@ -1146,8 +1146,9 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint
 
 		// TODO: determine which physical links we will use; we will have to iterate over all of them
 		// NOTE: currently we assume that we have a single link with bus_id = 0
-		uint16_t bus_id_to_use = 0;
-		siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, target_id, bus_id_to_use );
+		zepto_response_to_request( mem_h );
+		siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, target_id );
+		zepto_parser_free_memory( mem_h );
 
 		return SIOT_MESH_RET_OK;
 	}
@@ -1362,8 +1363,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 				siot_mesh_at_root_remove_resend_task_by_device_id( *device_id, currt, &(wf->wait_time) );
 				// TODO: determine which physical links we will use; we will have to iterate over all of them
 				// NOTE: currently we assume that we have a single link with bus_id = 0
-				uint16_t bus_id_to_use = 0;
-				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, device_or_bus_id, bus_id_to_use );
+				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, device_or_bus_id );
 				return SIOT_MESH_RET_OK;
 			}
 			break;
@@ -1372,15 +1372,14 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		{
 			zepto_response_to_request( mem_h );
 			siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( *device_id );
-			uint16_t bus_id_to_use = 0;
-			siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id, bus_id_to_use );
+			siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id );
 			return SIOT_MESH_RET_OK;
 			break;
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA:
 		{
 			*bus_id = device_or_bus_id;
-			return SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA;
+			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 	}
@@ -2120,6 +2119,7 @@ void siot_mesh_from_santa_pretask_holder_init( SIOT_MESH_FROM_SANTA_PRETASK_HOLD
 void siot_mesh_from_santa_pretask_holder_add_pretask( SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder, SIOT_MESH_FROM_SANTA_PRETASK* pretask )
 {
 	zepto_memman_append_locally_generated_data( holder->holder_h, sizeof(SIOT_MESH_FROM_SANTA_PRETASK), (uint8_t*)pretask );
+	(holder->obj_cnt)++;
 }
 
 uint16_t siot_mesh_from_santa_pretask_holder_get_count( const SIOT_MESH_FROM_SANTA_PRETASK_HOLDER* holder )
@@ -2159,6 +2159,7 @@ void siot_mesh_from_santa_pretask_holder_release( SIOT_MESH_FROM_SANTA_PRETASK_H
 			release_memory_handle( pretask.mem_h );
 	}
 	release_memory_handle( holder->holder_h );
+	holder->obj_cnt = 0;
 }
 
 #endif // USED_AS_RETRANSMITTER
@@ -2705,12 +2706,12 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 								// BROADCAST-BUS-TYPE-LIST (copying)
 								zepto_parser_init_by_parser( &po_block_start, &po_bustype_start );
 								zepto_parser_init_by_parser( &po_block_end, &po_bustype_end );
-								zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+								zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
 
 								//  Multiple-Target-Addresses (copying)
 								zepto_parser_init_by_parser( &po_block_start, &po_target_start );
 								zepto_parser_init_by_parser( &po_block_end, &po_target_end );
-								zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+								zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
 
 								// OPTIONAL-TARGET-REPLY-DELAY
 								if ( explicit_time_scheduling )
@@ -2729,7 +2730,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 								// PAYLOAD (copying)
 								zepto_parser_init_by_parser( &po_block_start, &po_payload_start );
 								zepto_parser_init_by_parser( &po_block_end, &po_payload_end );
-								zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+								zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
 
 								// FULL-CHECKSUM
 								checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
