@@ -61,6 +61,7 @@ typedef struct _SIOT_MESH_LINK
 
 #define SIOT_MESH_NEXT_HOP_UNDEFINED 0xFFFF
 #define SIOT_MESH_TARGET_UNDEFINED 0xFFFF
+#define SIOT_MESH_BUS_UNDEFINED 0xFFFF
 
 // rout table item
 typedef struct _SIOT_MESH_ROUTE
@@ -147,7 +148,7 @@ uint8_t siot_mesh_at_root_update_done( uint16_t device_id );
 
 void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, sa_time_val* time_to_next_event );
 void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t bus_id );
-uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_or_bus_id, sa_time_val* time_to_next_event );
+uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, uint16_t* bus_id, sa_time_val* time_to_next_event );
 void siot_mesh_at_root_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event );
 void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, const sa_time_val* currt, sa_time_val* time_to_next_event );
 

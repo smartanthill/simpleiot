@@ -1346,10 +1346,10 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	// TODO: actual implementation
 
 	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
-	*device_id = (uint16_t)(-1);
+	*device_id = SIOT_MESH_TARGET_UNDEFINED;
+	*bus_id = SIOT_MESH_BUS_UNDEFINED;
 
-	uint16_t device_or_bus_id;
-	uint8_t ret_code = siot_mesh_at_root_get_resend_task( mem_h, currt, &device_or_bus_id, &(wf->wait_time) );
+	uint8_t ret_code = siot_mesh_at_root_get_resend_task( mem_h, currt, device_id, bus_id, &(wf->wait_time) );
 	switch (ret_code )
 	{
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NONE_EXISTS:
@@ -1357,14 +1357,14 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			break;
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM:
 		{
-			*device_id = device_or_bus_id;
+			ZEPTO_DEBUG_ASSERT( *device_id != SIOT_MESH_TARGET_UNDEFINED );
 			uint16_t link_id;
 			zepto_response_to_request( mem_h );
 			uint16_t checksum;
 			bool route_known = siot_mesh_at_root_target_to_link_id( *device_id, &link_id ) == SIOT_MESH_RET_OK;
 			if ( route_known )
 			{
-				siot_mesh_form_unicast_packet( device_or_bus_id, mem_h, link_id, bus_id, true, &checksum );
+				siot_mesh_form_unicast_packet( *device_id, mem_h, link_id, bus_id, true, &checksum );
 				return SIOT_MESH_RET_PASS_TO_SEND;
 			}
 			else
@@ -1372,14 +1372,14 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 				siot_mesh_at_root_remove_resend_task_by_device_id( *device_id, currt, &(wf->wait_time) );
 				// TODO: determine which physical links we will use; we will have to iterate over all of them
 				// NOTE: currently we assume that we have a single link with bus_id = 0
-				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, device_or_bus_id );
+				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id );
 				return SIOT_MESH_RET_OK;
 			}
 			break;
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL:
 		{
-			*device_id = device_or_bus_id;
+			ZEPTO_DEBUG_ASSERT( *device_id != SIOT_MESH_TARGET_UNDEFINED );
 			zepto_response_to_request( mem_h );
 			siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( *device_id );
 			siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id );
@@ -1388,7 +1388,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA:
 		{
-			*bus_id = device_or_bus_id;
+			ZEPTO_DEBUG_ASSERT( *bus_id != SIOT_MESH_BUS_UNDEFINED );
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
@@ -1439,6 +1439,18 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 	zepto_parser_init( &po, mem_h );
 	zepto_parser_init( &po1, mem_h );
 	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
+
+#ifdef SA_DEBUG
+	{
+		uint16_t i;
+		parser_obj podbg;
+		zepto_parser_init( &podbg, mem_h );
+		ZEPTO_DEBUG_PRINTF_2( "handler_siot_mesh_receive_packet(): packet received: sz = %d, packet = ", total_packet_sz );
+		for ( i=0; i<total_packet_sz; i++)
+			ZEPTO_DEBUG_PRINTF_2( "%02x ", zepto_parse_uint8( &podbg ) );
+		ZEPTO_DEBUG_PRINTF_1( "\n" );
+	}
+#endif // SA_DEBUG
 
 	uint16_t header = zepto_parse_encoded_uint16( &po );
 	// TODO: here and then use bit-field processing instead
@@ -3799,10 +3811,11 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 			case ADD_OR_MODIFY_LINK_ENTRY:
 			{
 				SIOT_MESH_LINK link;
-				// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
+				// | ADD-OR-MODIFY-LINK-ENTRY-AND-LINK-ID | BUS-ID | NEXT-HOP | NEXT-HOP-ACKS-AND-INTRA-BUS-ID-PLUS-1 | OPTIONAL-LINK-DELAY-UNIT | OPTIONAL-LINK-DELAY | OPTIONAL-LINK-DELAY-ERROR |
 				bool link_delay_present = ( entry_header >> 3 ) & 1;// bit[3] being LINK-DELAY-PRESENT flag
 				link.LINK_ID = entry_header >> 4; // bits[4..] equal to LINK-ID
 				link.BUS_ID = zepto_parse_encoded_uint16( po );
+				link.NEXT_HOP = zepto_parse_encoded_uint16( po );
 				// NEXT-HOP-ACKS-AND-INTRA-BUS-ID: Encoded-Unsigned-Int<max=4> bitfield substrate 
 				uint32_t ibid_pl_1 = zepto_parse_encoded_uint32( po );
 				link.NEXT_HOP_ACKS = ibid_pl_1 & 1; // bit[0] being a NEXT-HOP-ACKS flag for the Routing Table Entry
