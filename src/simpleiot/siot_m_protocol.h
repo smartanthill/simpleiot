@@ -37,7 +37,7 @@ extern uint16_t DEVICE_SELF_ID;
 #define SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN 1
 #define SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK 2
 #define SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP 3
-
+#define SIOT_MESH_TTL_MAX 4
 // Route table MODIFICATIONS-LIST entry types
 #define ADD_OR_MODIFY_LINK_ENTRY 0
 #define DELETE_LINK_ENTRY 1
@@ -165,6 +165,7 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND 5
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND_UNICAST_IN_TRANSIT 4
 #define MESH_RESEND_PERIOD_MS 100
+#define MESH_RFEPLY_TO_FROMSANTA_PERIOD_MS_MAX 500
 
 void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
 void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );

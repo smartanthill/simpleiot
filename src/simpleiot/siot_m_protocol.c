@@ -865,6 +865,7 @@ typedef struct _SIOT_MESH_LAST_REQUEST
 	SIOT_MESH_LAST_HOP_DATA* hop_list;
 	uint8_t hop_list_sz;
 	bool ineffect;
+	sa_time_val time_to_send_back;
 } SIOT_MESH_LAST_REQUEST;
 
 static SIOT_MESH_LAST_REQUEST last_requests[2] = 
@@ -907,13 +908,30 @@ void siot_mesh_add_last_hop_data( uint8_t slot_id, uint16_t last_hop_id, uint16_
 	}
 }
 
-void siot_mesh_init_last_hop_data_storage( uint8_t slot_id, uint16_t request_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
+void siot_mesh_init_last_hop_data_storage( const sa_time_val* currt, uint8_t slot_id, uint16_t request_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q )
 {
 	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
 	last_requests[slot_id].hop_list_sz = 0;
 	last_requests[slot_id].ineffect = true;
 	last_requests[slot_id].rq_id = request_id;
+	sa_hal_time_val_copy_from( &(last_requests[slot_id].time_to_send_back), currt );
+	sa_time_val diff_tval;
+	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RFEPLY_TO_FROMSANTA_PERIOD_MS_MAX, diff_tval );
+	SA_TIME_INCREMENT_BY_TICKS( last_requests[slot_id].time_to_send_back, diff_tval );
 	siot_mesh_add_last_hop_data( slot_id, last_hop_id, last_hop_bus_id, conn_q );
+}
+
+bool siot_mesh_last_hop_data_storage_is_time_to_send( uint8_t slot_id, const sa_time_val* currt, sa_time_val* time_to_next_event )
+{
+	sa_time_val remaining;
+	if ( last_requests[slot_id].ineffect )
+	{
+		bool in_future = sa_hal_time_val_get_remaining_time( currt, &(last_requests[slot_id].time_to_send_back), &remaining );
+		sa_hal_time_val_copy_from_if_src_less( time_to_next_event, &remaining );
+		return !in_future;
+	}
+	else
+		return false;
 }
 
 bool siot_mesh_clean_last_hop_data_storage_if_single_element( uint8_t slot_id )
@@ -929,7 +947,7 @@ bool siot_mesh_clean_last_hop_data_storage_if_single_element( uint8_t slot_id )
 	return false;
 }
 
-void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers, uint16_t* request_id )
+void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers, uint16_t* request_id, bool release_slot )
 {
 	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
 	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
@@ -950,6 +968,11 @@ void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDL
 	zepto_parser_encode_and_append_uint16( mem_h, header );
 	zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
 	zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
+	if ( release_slot )
+	{
+		last_requests[slot_id].hop_list_sz = 0;
+		last_requests[slot_id].ineffect = false;
+	}
 }
 
 #endif // USED_AS_MASTER
@@ -1020,7 +1043,7 @@ void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, 
 	parser_obj po, po1;
 
 	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
-	uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( 4 << 5 ); // '1', packet type, 0 (no extra headers), TTL = 4
+	uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( SIOT_MESH_TTL_MAX << 5 ); // '1', packet type, 0 (no extra headers), TTL = SIOT_MESH_TTL_MAX
 	zepto_parser_encode_and_append_uint16( mem_h, header );
 
 	// LAST-HOP
@@ -1083,7 +1106,7 @@ void siot_mesh_form_unicast_packet( uint16_t target_id, MEMORY_HANDLE mem_h, uin
 	// !!! TODO: it might happen that this packet is not a reply to 'from Santa'; check, which data should be added this case
 
 	// header: bit[0]: 0, bit[1]: ACKNOWLEDGED-DELIVERY flag, bit[2]: 0, bit[3]: EXTRA-HEADERS-PRESENT, bit[4]: DIRECTION-FLAG (is from the Root), bits[5..]: TTL
-	uint16_t ttl = 4; // TODO: source??
+	uint16_t ttl = SIOT_MESH_TTL_MAX; // TODO: source??
 	// TODO: set other fields as necessary
 	header = 0 | ( request_ack ? 2 : 0 ) | ( 1 << 4 ) | ( ttl << 5 );
 	zepto_parser_encode_and_append_uint16( mem_h, header );
@@ -1162,7 +1185,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint
 	}
 }
 
-uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HANDLE mem_h, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_quality_at_first_receiver, bool payload_present, uint16_t request_id )
+uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HANDLE mem_h, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_hop, uint8_t conn_quality_at_first_receiver, bool payload_present, uint16_t request_id )
 {
 	// here we already know that the packet is good enough
 	parser_obj po, po1, po2;
@@ -1210,14 +1233,21 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HAND
 		}
 	}
 
+	first_hop;
 	if ( packet_type == SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET )
 	{
 		// NEXT-HOP
+		uint16_t _first_hop = zepto_parse_encoded_uint16( &po );
+
+		// NEXT-HOP
 		uint16_t next_hop = zepto_parse_encoded_uint16( &po );
 #ifdef SA_DEBUG
+		ZEPTO_DEBUG_ASSERT( first_hop == _first_hop );
 		ZEPTO_DEBUG_ASSERT( next_hop == 0 );
 #endif // SA_DEBUG
 	}
+	else
+		ZEPTO_DEBUG_ASSERT( first_hop == 0 );
 
 	// SOURCE-ID
 #ifdef SA_DEBUG
@@ -1241,7 +1271,7 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HAND
 #endif // SA_DEBUG
 
 
-	siot_mesh_at_root_add_last_hop_out_data( src_id, bus_id_at_src, first_receiver_id, conn_quality_at_first_receiver );
+	siot_mesh_at_root_add_last_hop_out_data( src_id, bus_id_at_src, first_hop, conn_quality_at_first_receiver );
 
 	// OPTIONAL-PAYLOAD-SIZE
 
@@ -1565,8 +1595,12 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					}
 				}
 
+				uint16_t first_hop;
 				if ( packet_type == SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET )
 				{
+					// FIRST-HOP (reading)
+					first_hop = zepto_parse_encoded_uint16( &po );
+
 					// NEXT-HOP
 					uint16_t next_hop = zepto_parse_encoded_uint16( &po );
 					if ( next_hop != 0 )
@@ -1574,6 +1608,12 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 						ZEPTO_DEBUG_PRINTF_2( "Packet for device %d received (unicast); ignored\n", next_hop );
 						return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 					}
+				}
+				else
+				{
+					ZEPTO_DEBUG_ASSERT( packet_type == SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET );
+					// FIRST-HOP (deriving)
+					first_hop = 0;
 				}
 
 				// (FORWARDED-)SOURCE-ID
@@ -1613,7 +1653,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					else
 					{
 						// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
-						return siot_mesh_process_received_tosanta_or_forwardtosanta_packet( mem_h, *src_id, bus_id_at_src, 0, conn_quality, remaining_size > 2, request_id );
+						return siot_mesh_process_received_tosanta_or_forwardtosanta_packet( mem_h, *src_id, bus_id_at_src, first_hop, conn_quality, remaining_size > 2, request_id );
 					}
 				}
 				else // packet is broken; subject for NAK
@@ -1973,14 +2013,24 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t mesh_val )
 
 	// !!! TODO: it might happen that this packet is not a reply to 'from Santa'; check, which data should be added this case
 
+	// HMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL: bit[0]=1, bits[1..3] = HMP_TO_SANTA_DATA_OR_ERROR_PACKET, bit[4] = EXTRA-HEADERS-PRESENT, and bits [5..] reserved (MUST be zero)
+
 	uint16_t request_id = 0;
 	if ( mesh_val < 2 )
 	{
-		// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
-		header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 1 << 4 ); // '1', packet type, 1 (at least one extra header: hop list item), rezerved (zeros)
-		zepto_parser_encode_and_append_uint16( mem_h, header );
-		ZEPTO_DEBUG_ASSERT( mesh_val < 2 );
-		siot_mesh_write_last_hop_data_as_opt_headers( mesh_val, mem_h, true, &request_id );
+		if ( last_requests[mesh_val].ineffect )
+		{
+			// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
+			header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 1 << 4 ); // '1', packet type, 1 (at least one extra header: hop list item), rezerved (zeros)
+			zepto_parser_encode_and_append_uint16( mem_h, header );
+			ZEPTO_DEBUG_ASSERT( mesh_val < 2 );
+			siot_mesh_write_last_hop_data_as_opt_headers( mesh_val, mem_h, true, &request_id, true );
+		}
+		else
+		{
+			header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 0 << 4 ); // '1', packet type, 0 (no extra headers), rezerved (zeros)
+			zepto_parser_encode_and_append_uint16( mem_h, header );
+		}
 	}
 	else
 	{
@@ -2024,7 +2074,7 @@ void siot_mesh_form_routing_error_packet( MEMORY_HANDLE mem_h, uint16_t failed_n
 	// HEADER
 	// HMP-ROUTING-ERROR-PACKET-AND-TTL; encoded uint16 with bit[0]=1, bits[1..3]: HMP_ROUTING_ERROR_PACKET, bit [4]: EXTRA-HEADERS-PRESENT, and bits [5..]: TTL
 	uint16_t header;
-	uint16_t ttl = 4; // TODO: source?
+	uint16_t ttl = SIOT_MESH_TTL_MAX;
 	uint16_t extra_h_present = 0; // TODO: source?
 	header = 1 | ( SIOT_MESH_ROUTING_ERROR_PACKET << 1 ) | ( extra_h_present << 4 ) | ( ttl << 5 );
 	zepto_parser_encode_and_append_uint16( mem_h, header );
@@ -2079,7 +2129,7 @@ void siot_mesh_form_unicast_packet( MEMORY_HANDLE mem_h, uint16_t link_id, uint1
 	// !!! TODO: it might happen that this packet is not a reply to 'from Santa'; check, which data should be added this case
 
 	// header: bit[0]: 0, bit[1]: ACKNOWLEDGED-DELIVERY flag, bit[2]: 0, bit[3]: EXTRA-HEADERS-PRESENT, bit[4]: DIRECTION-FLAG (is from the Root), bits[5..]: TTL
-	uint16_t ttl = 4; // TODO: source??
+	uint16_t ttl = SIOT_MESH_TTL_MAX;
 	// TODO: set other fields as necessary
 	header = 0 | ( request_ack ? 2 : 0 ) | ( ttl << 5 );
 	zepto_parser_encode_and_append_uint16( mem_h, header );
@@ -2521,7 +2571,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 						*mesh_val = 0;
 						if ( last_requests[0].ineffect )
 							*mesh_val = 1;
-						siot_mesh_init_last_hop_data_storage( *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
+						siot_mesh_init_last_hop_data_storage( currt, *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 					}
 
 					return SIOT_MESH_RET_PASS_TO_PROCESS;
@@ -2583,7 +2633,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 							// THIS IS ONE OF RETRANSMITTERS WE HAVE A ROUTE TO; PREPARE A PACKET
 
 							// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL 
-							uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( extra_headers_present << 4) | ( TTL << 5 ); // '1', packet type, 0 (no extra headers), TTL = 4
+							uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( extra_headers_present << 4) | ( TTL << 5 ); // '1', packet type, 0 (no extra headers), TTL
 							zepto_parser_encode_and_append_uint16( output_h, header );
 
 							// OPTIONAL-EXTRA-HEADERS (copying)
@@ -2717,7 +2767,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 								// THIS IS ONE OF RETRANSMITTERS WE HAVE A ROUTE TO; PREPARE A PACKET
 
 								// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL 
-								uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( extra_headers_present << 4) | ( TTL << 5 ); // '1', packet type, 0 (no extra headers), TTL = 4
+								uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( extra_headers_present << 4) | ( TTL << 5 ); // '1', packet type, 0 (no extra headers), TTL
 								zepto_parser_encode_and_append_uint16( output_h, header );
 
 								// OPTIONAL-EXTRA-HEADERS (copying)
@@ -2988,7 +3038,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 						*mesh_val = 0;
 						if ( last_requests[0].ineffect )
 							*mesh_val = 1;
-						siot_mesh_init_last_hop_data_storage( *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
+						siot_mesh_init_last_hop_data_storage( currt, *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 					}
 
 					return SIOT_MESH_RET_PASS_TO_PROCESS;
@@ -3002,7 +3052,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 			{
 				// Hmp-To-Santa-Data-Or-Error-Packet: | HMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS | SOURCE-ID | BUS-ID-AT-SOURCE | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 				// to be converted to
-				// Hmp-Forward-To-Santa-Data-Or-Error-Packet: | HMP-FORWARD-TO-SANTA-DATA-OR-ERROR-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | NEXT-HOP | FORWARDED-SOURCE-ID | FORWARDED-BUS-ID-AT-SOURCE | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+				// Hmp-Forward-To-Santa-Data-Or-Error-Packet: | HMP-FORWARD-TO-SANTA-DATA-OR-ERROR-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | FIRST-HOP | NEXT-HOP | FORWARDED-SOURCE-ID | FORWARDED-BUS-ID-AT-SOURCE | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 				// or
 				// Hmp-Forward-To-Santa-Data-Or-Error-Packet -> Hmp-Forward-To-Santa-Data-Or-Error-Packet
 				// We start from an optimistic assumption that the packet is integral and start writing a Forward-To-Santa packet
@@ -3011,13 +3061,20 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
 				uint8_t extra_headers_present = ( header >> 4 ) & 0x1;
-				uint16_t TTL = header >> 5;
-				if ( TTL == 0 )
+				uint16_t TTL;
+				if ( packet_type == SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET )
 				{
-					ZEPTO_DEBUG_PRINTF_1( "Packet with TTL = 0 received; dropped\n" );
-					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
+					TTL = header >> 5;
+					if ( TTL == 0 )
+					{
+						ZEPTO_DEBUG_PRINTF_1( "Packet with TTL = 0 received; dropped\n" );
+						return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
+					}
+					TTL--;
 				}
-				uint16_t output_header = 1 | ( SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( extra_headers_present << 4 ) | ( (TTL-1) << 5 );
+				else
+					TTL = SIOT_MESH_TTL_MAX - 1;
+				uint16_t output_header = 1 | ( SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( extra_headers_present << 4 ) | ( TTL << 5 );
 				zepto_parser_encode_and_append_uint16( mem_h, output_header );
 
 				// now we're done with the header; proceeding to optional headers...
@@ -3052,10 +3109,14 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 				zepto_append_part_of_request_to_response( mem_h, &po_eh_start, &po );
 
-				// NEXT-HOP (reading)
 				uint16_t next_hop;
+				uint16_t first_hop;
 				if ( packet_type == SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET )
 				{
+					// FIRST-HOP (reading)
+					first_hop = zepto_parse_encoded_uint16( &po );
+
+					// NEXT-HOP (reading)
 					next_hop = zepto_parse_encoded_uint16( &po );
 					if ( next_hop != DEVICE_SELF_ID )
 					{
@@ -3066,9 +3127,14 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				else
 				{
 					ZEPTO_DEBUG_ASSERT( packet_type == SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET );
+					// FIRST-HOP (setting)
+					first_hop = DEVICE_SELF_ID;
 				}
 
-				// NEXT-HOP (writing)
+				// FIRST-HOP (writing)
+				zepto_parser_encode_and_append_uint16( mem_h, first_hop );
+
+				// NEXT-HOP (updating and writing)
 				uint16_t link_id;
 				uint8_t ret_code = siot_mesh_target_to_link_id( 0, &link_id ); // root is a target
 				if ( ret_code != SIOT_MESH_RET_OK )
@@ -3721,7 +3787,22 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			sa_hal_time_val_get_remaining_time( currt, &(pending_resends[i].next_resend_time), &(wf->wait_time) );
 //	ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): time to next event: %d, %d  ###########\n", wf->wait_time.low_t, wf->wait_time.high_t );
 
-	return packet_ready ? SIOT_MESH_RET_PASS_TO_SEND : SIOT_MESH_RET_OK;
+	if ( packet_ready )
+		return SIOT_MESH_RET_PASS_TO_SEND;
+
+	if ( siot_mesh_last_hop_data_storage_is_time_to_send( 0, currt, &(wf->wait_time) ) )
+	{
+		siot_mesh_form_packet_to_santa( mem_h, 0 );
+		return SIOT_MESH_RET_PASS_TO_SEND;
+	}
+
+	if ( siot_mesh_last_hop_data_storage_is_time_to_send( 1, currt, &(wf->wait_time) ) )
+	{
+		siot_mesh_form_packet_to_santa( mem_h, 1 );
+		return SIOT_MESH_RET_PASS_TO_SEND;
+	}
+
+	return SIOT_MESH_RET_OK;
 #endif
 }
 
