@@ -431,7 +431,7 @@ void siot_mesh_at_root_add_resend_unicast_task( MEMORY_HANDLE packet, const sa_t
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
 	resend.type = MESH_PENDING_RESEND_TYPE_TRANSIT_UNICAST;
-	resend.packet_h = packet;
+	resend.packet_h = acquire_memory_handle();
 	resend.bus_id = bus_id;
 	resend.target_id = target_id;
 	resend.next_hop = next_hop;
@@ -594,9 +594,7 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* curr
 		}
 		case MESH_PENDING_RESEND_TYPE_TRANSIT_UNICAST:
 		{
-			ZEPTO_DEBUG_ASSERT( resend.resend_cnt > 0 );
 			zepto_parser_free_memory( packet );
-		//	zepto_response_to_request( packet );
 			uint8_t ret_val;
 
 			if ( resend.resend_cnt == 0 ) // erase resend task
@@ -1908,7 +1906,7 @@ void siot_mesh_form_ack_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_
 
 
 #ifdef USED_AS_RETRANSMITTER
-void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t* packet_checksum, bool being_resent )
+void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, bool from_root, uint16_t non_root_addr, uint16_t* packet_checksum, bool being_resent )
 {
 	// NOTE: here we assume that the input packet is integral
 	//  | SAMP-UNICAST-DATA-PACKET-FLAGS-AND-TTL | OPTIONAL-EXTRA-HEADERS | NEXT-HOP | LAST-HOP | Non-Root-Address | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
@@ -1940,6 +1938,8 @@ void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, uint1
 		ZEPTO_DEBUG_ASSERT( 0 == "Not yet implemented" );
 	}
 
+	uint16_t target_id = from_root ? non_root_addr : 0;
+
 	// NEXT-HOP
 	uint16_t link_id;
 	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
@@ -1969,9 +1969,9 @@ void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, uint1
 #ifdef SA_DEBUG
 	target_id_in_packet >>= 1;
 	ZEPTO_DEBUG_ASSERT( (target_id_in_packet & 1) == 0 ); // TODO: provide full implementation
-	ZEPTO_DEBUG_ASSERT( target_id_in_packet == target_id ); // TODO: provide full implementation
+	ZEPTO_DEBUG_ASSERT( target_id_in_packet == non_root_addr );
 #endif
-	zepto_parser_encode_and_append_uint16( mem_h, target_id << 1 );
+	zepto_parser_encode_and_append_uint16( mem_h, non_root_addr << 1 );
 
 	// OPTIONAL-PAYLOAD-SIZE
 
@@ -1989,8 +1989,8 @@ void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, uint1
 	uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
 	ZEPTO_DEBUG_ASSERT( remaining_size >= 2 );
 
-	zepto_parser_init( &po, mem_h );
-	zepto_parser_init( &po1, mem_h );
+//	zepto_parser_init( &po, mem_h );
+//	zepto_parser_init( &po1, mem_h );
 	zepto_parse_skip_block( &po1, remaining_size - 2 );
 	zepto_append_part_of_request_to_response( mem_h, &po, &po1 );
 
@@ -3414,7 +3414,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		}
 
 		// NEXT-HOP
-		uint16_t next_hop = zepto_parse_encoded_uint16( &po ); // TODO: here, in a correct packet we expect to see 0; what to do in case of errors?
+		uint16_t next_hop = zepto_parse_encoded_uint16( &po );
 
 		// LAST-HOP
 		uint16_t last_hop = zepto_parse_encoded_uint16( &po );
@@ -3422,9 +3422,10 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		// Non-Root-Address
 		// we implement quick coding assuming no extra data follow
 		// TODO: full implementation with VIA fields, etc
-		uint16_t target_id = zepto_parse_encoded_uint16( &po );
-		ZEPTO_DEBUG_ASSERT( (target_id & 1) == 0 ); // TODO: provide full implementation
-		target_id >>= 1;
+		uint16_t non_root_addr = zepto_parse_encoded_uint16( &po );
+		ZEPTO_DEBUG_ASSERT( (non_root_addr & 1) == 0 ); // TODO: provide full implementation
+		non_root_addr >>= 1;
+		uint16_t target_id = is_from_root ? non_root_addr : 0;
 
 #ifdef USED_AS_RETRANSMITTER
 #else // USED_AS_RETRANSMITTER
@@ -3520,7 +3521,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					return SIOT_MESH_RET_OK;
 				}
 
-				siot_mesh_rebuild_unicast_packet_for_forwarding( mem_h, target_id, &packet_checksum, false );
+				siot_mesh_rebuild_unicast_packet_for_forwarding( mem_h, is_from_root, non_root_addr, &packet_checksum, false );
 
 				uint16_t link_id;
 				uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
