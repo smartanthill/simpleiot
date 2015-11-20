@@ -389,7 +389,7 @@ void siot_mesh_add_resend_task( MEMORY_HANDLE packet/*, uint8_t type*/, const sa
 		}
 	}
 #else // 0
-	zepto_copy_request_to_response_of_another_handle( packet, resend.packet_h );
+	zepto_copy_response_to_response_of_another_handle( packet, resend.packet_h );
 #endif
 	zepto_response_to_request( resend.packet_h );
 
@@ -732,6 +732,7 @@ typedef struct _MESH_PENDING_RESENDS
 	uint8_t resend_cnt;
 	sa_time_val next_resend_time;
 	uint16_t checksum;
+	uint16_t bus_id;
 //	uint16_t target_id; // TODO: for a terminating device it is always 0 (rooot), right? - subject for optimization
 } MESH_PENDING_RESENDS;
 
@@ -1156,7 +1157,7 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint
 			uint16_t checksum;
 			siot_mesh_form_unicast_packet( target_id, mem_h, link_id, bus_id, false, &checksum );
 			ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_send_packet(): known route  ###########\n" );
-			return SIOT_MESH_RET_OK;
+			return SIOT_MESH_RET_PASS_TO_SEND;
 		}
 
 		uint16_t checksum;
@@ -1388,7 +1389,8 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM:
 		{
 			ZEPTO_DEBUG_ASSERT( *device_id != SIOT_MESH_TARGET_UNDEFINED );
-			uint16_t link_id;
+			ZEPTO_DEBUG_ASSERT( *bus_id != SIOT_MESH_BUS_UNDEFINED );
+/*			uint16_t link_id;
 			zepto_response_to_request( mem_h );
 			uint16_t checksum;
 			bool route_known = siot_mesh_at_root_target_to_link_id( *device_id, &link_id ) == SIOT_MESH_RET_OK;
@@ -1404,7 +1406,8 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 				// NOTE: currently we assume that we have a single link with bus_id = 0
 				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id );
 				return SIOT_MESH_RET_OK;
-			}
+			}*/
+			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL:
@@ -1548,7 +1551,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					// OPTIONAL-DELAY-LEFT
 				}
 
-				siot_mesh_at_root_remove_resend_task_by_hash( checksum, currt, &(wf->wait_time) );
+				siot_mesh_at_root_remove_resend_task_by_hash( ack_checksum, currt, &(wf->wait_time) );
 
 				return SIOT_MESH_RET_OK;
 			}
@@ -2170,6 +2173,72 @@ void siot_mesh_form_unicast_packet( MEMORY_HANDLE mem_h, uint16_t link_id, uint1
 	*packet_checksum = checksum;
 }
 
+void siot_mesh_unicast_packet_to_root_to_tosanta( MEMORY_HANDLE mem_h )
+{
+	parser_obj po, po1;
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
+
+#ifdef SA_DEBUG
+/*	{
+		uint16_t i;
+		parser_obj podbg;
+		zepto_parser_init( &podbg, mem_h );
+		ZEPTO_DEBUG_PRINTF_2( "handler_siot_mesh_receive_packet(): packet received: sz = %d, packet = ", total_packet_sz );
+		for ( i=0; i<total_packet_sz; i++)
+			ZEPTO_DEBUG_PRINTF_2( "%02x ", zepto_parse_uint8( &podbg ) );
+		ZEPTO_DEBUG_PRINTF_1( "\n" );
+	}*/
+#endif // SA_DEBUG
+
+	uint16_t header = zepto_parse_encoded_uint16( &po );
+	ZEPTO_DEBUG_ASSERT( ( ( header >> 4 ) & 0x1 ) == 0 );
+if( ( header & 1 ) )
+{
+	header = header;
+}
+	ZEPTO_DEBUG_ASSERT( ( header & 1 ) == 0 );
+
+	bool extra_headers_present = ( header >> 3 ) & 0x1;
+	while ( extra_headers_present )
+	{
+		header = zepto_parse_encoded_uint16( &po );
+		extra_headers_present = header & 0x1;
+		uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
+		switch ( generic_flags )
+		{
+			case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
+			case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
+			case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
+			case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
+			{
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+				break;
+			}
+		}
+	}		
+		
+	zepto_parse_encoded_uint16( &po ); // NEXT-HOP (skip)
+	zepto_parse_encoded_uint16( &po ); // LAST-HOP (skip)
+	uint16_t non_root_addr = zepto_parse_encoded_uint16( &po ); // Non-Root-Address (skip)
+	// we implement quick coding assuming no extra data follow
+	// TODO: full implementation with VIA fields, etc
+	ZEPTO_DEBUG_ASSERT( (non_root_addr & 1) == 0 ); // TODO: provide full implementation
+	ZEPTO_DEBUG_ASSERT( ( non_root_addr >> 1 ) == DEVICE_SELF_ID );
+	zepto_parse_uint8( &po ); // // HEADER-CHECKSUM low (skip)
+	zepto_parse_uint8( &po ); // // HEADER-CHECKSUM high (skip)
+		
+	uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+	ZEPTO_DEBUG_ASSERT( remaining_size >= 2 );
+	zepto_parser_init_by_parser( &po1, &po );
+	zepto_parse_skip_block( &po1, remaining_size - 2 );
+	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
+	zepto_response_to_request( mem_h );
+
+	siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+}
+
 #ifdef USED_AS_RETRANSMITTER
 
 typedef struct _SIOT_MESH_FROM_SANTA_PRETASK
@@ -2336,7 +2405,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// remove resend tasks (if any)
 #ifdef USED_AS_RETRANSMITTER
-				siot_mesh_remove_resend_task_by_hash( checksum, currt, &(wf->wait_time) );
+				siot_mesh_remove_resend_task_by_hash( ack_checksum, currt, &(wf->wait_time) );
 #else // USED_AS_RETRANSMITTER
 				uint8_t i;
 				for ( i=0; i<PENDING_RESENDS_MAX; i++ )
@@ -3507,12 +3576,12 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 			}
 			if ( next_hop == DEVICE_SELF_ID ) // through us; so let's forward it (it is somehow similar to sending our own packets; just kindle re-assemble the packet received updating certain fields0
 			{
-				if ( ack_requested )
+/*				if ( ack_requested )
 				{
 					uint16_t num_err = 0; // TODO: ACTUAL SOURCE???
 					zepto_parser_free_memory( mem_ack_h );
 					siot_mesh_form_ack_packet( mem_ack_h, last_hop, num_err, packet_reported_checksum );
-				}
+				}*/
 				uint16_t ttl = header >> 5;
 				uint16_t packet_checksum;
 				if ( ttl == 0  ) // cannot forward it further; an error must be reported
@@ -3581,9 +3650,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 			if ( ack_requested )
 			{
-				uint16_t num_err = 0; // TODO: ACTUAL SOURCE???
 				zepto_parser_free_memory( mem_ack_h );
-				siot_mesh_form_ack_packet( mem_ack_h, last_hop, num_err, packet_reported_checksum );
+				siot_mesh_form_ack_packet( mem_ack_h, last_hop, error_cnt, packet_reported_checksum );
 				return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
 			}
 
@@ -3632,7 +3700,7 @@ bool siot_mesh_is_toward_root( MEMORY_HANDLE mem_h )
 
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id )
 {
-	uint16_t link_id;
+//	uint16_t link_id;
 #ifdef USED_AS_RETRANSMITTER
 	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
 
@@ -3645,7 +3713,8 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			break;
 		case SIOT_MESH_RET_RESEND_TASK_INTERM:
 		{
-			zepto_response_to_request( mem_h );
+			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_INTERM, target: %d  ###########\n", info.target_id );
+/*			zepto_response_to_request( mem_h );
 			uint16_t checksum;
 			bool route_known = siot_mesh_target_to_link_id( info.target_id, &link_id ) == SIOT_MESH_RET_OK;
 			if ( route_known )
@@ -3656,33 +3725,39 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			{
 				siot_mesh_remove_resend_task_by_device_id( info.target_id, currt, &(wf->wait_time) );
 				siot_mesh_form_packet_to_santa( mem_h, 0xFF );
-			}
+			}*/
+			*bus_id = info.bus_id;
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 		case SIOT_MESH_RET_RESEND_TASK_FINAL:
 		{
+			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_FINAL, target: %d  ###########\n", info.target_id );
 			// TODO: if the direction is toward the root, we send To-Santa; otherwise we send an error packet
-			zepto_parser_free_memory( mem_h );
-			siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+//			zepto_parser_free_memory( mem_h );
+//			siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+			zepto_response_to_request( mem_h );
+			siot_mesh_unicast_packet_to_root_to_tosanta( mem_h );
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
-#ifdef USED_AS_RETRANSMITTER
 		case SIOT_MESH_RET_RESEND_TASK_FROM_SANTA:
 		{
+			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_FROM_SANTA, bus: %d  ###########\n", info.bus_id );
 			*bus_id = info.bus_id;
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 		case SIOT_MESH_RET_RESEND_TASK_UNICAST:
 		{
+			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_UNICAST, bus: %d  ###########\n", info.bus_id );
 			*bus_id = info.bus_id;
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
 		case SIOT_MESH_RET_RESEND_TASK_UNICAST_POSTFINAL:
 		{
+			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_UNICAST_POSTFINAL, target: %d  ###########\n", info.target_id );
 			// TODO: if the direction is toward the root, we send To-Santa; otherwise we send an error packet
 			zepto_parser_free_memory( mem_h );
 			if ( info.target_id == 0 )
@@ -3709,7 +3784,6 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
-#endif
 		default:
 		{
 			ZEPTO_DEBUG_ASSERT( 0 == "Unexpected ret code" );
@@ -3719,7 +3793,6 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	return SIOT_MESH_RET_OK;
 
 #else // USED_AS_RETRANSMITTER
-//	ZEPTO_DEBUG_PRINTF_1( "         +++++++++++++++++++############  handler_siot_mesh_timer() called  ###########++++++++++++++++++++++\n" );
 	// TODO: processing on a terminating device is much easier, reimplement!!!
 	uint8_t i;
 	bool time_still_remains;
@@ -3739,39 +3812,38 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	if ( oldest_index != (uint8_t)(-1) ) // at least, one potential candidate
 	{
 //		// find "second old"; this will give use how long to wait then
-//		SA_TIME_SET_INFINITE_TIME( oldest_time_point );
 			time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(pending_resends[oldest_index].next_resend_time), &(wf->wait_time) );
 			if ( !time_still_remains ) // time to process 
 			{
 				zepto_copy_request_to_response_of_another_handle( pending_resends[oldest_index].packet_h, mem_h ); // create our own copy
-				zepto_response_to_request( mem_h );
+//				zepto_response_to_request( mem_h );
 				bool is_last = pending_resends[oldest_index].resend_cnt > 1;
 //				bool route_known = siot_mesh_target_to_link_id( pending_resends[oldest_index].target_id, link_id ) == SIOT_MESH_RET_OK;
-				bool route_known = siot_mesh_target_to_link_id( 0, &link_id ) == SIOT_MESH_RET_OK;
-				if ( (!is_last) && route_known )
+//				bool route_known = siot_mesh_target_to_link_id( 0, &link_id ) == SIOT_MESH_RET_OK;
+//				if ( (!is_last) && route_known )
+				if ( !is_last )
 				{
-					uint16_t checksum;
-//					siot_mesh_form_unicast_packet( mem_h, *link_id, pending_resends[oldest_index].target_id, true, &checksum );
+/*					uint16_t checksum;
 					siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, 0, true, &checksum );
-					ZEPTO_DEBUG_ASSERT( checksum == pending_resends[oldest_index].checksum );
+					ZEPTO_DEBUG_ASSERT( checksum == pending_resends[oldest_index].checksum );*/
 					sa_time_val diff_tval;
 					TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
-//					sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &diff_tval );
 					sa_hal_time_val_copy_from( &(pending_resends[oldest_index].next_resend_time), currt );
 					SA_TIME_INCREMENT_BY_TICKS( pending_resends[oldest_index].next_resend_time, diff_tval );
 					(pending_resends[oldest_index].resend_cnt)--;
-					ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): packet is abuot to be sent as unicast (resent cnt = %d, shecksum = %04x)  ###########\n", pending_resends[oldest_index].resend_cnt, checksum );
+					ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): packet is abuot to be sent as unicast (resent cnt = %d, shecksum = %04x)  ###########\n", pending_resends[oldest_index].resend_cnt, pending_resends[oldest_index].checksum );
 				}
 				else
 				{
-					if ( is_last )
+/*					if ( is_last )
 					{
 						if ( siot_mesh_target_to_link_id( 0, &link_id ) == SIOT_MESH_RET_OK )
 							siot_mesh_remove_link( link_id );
 						siot_mesh_delete_route( 0 );
-					}
-//					siot_mesh_form_packet_to_santa( mem_h, 0xFF, pending_resends[oldest_index].target_id );
-					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+					}*/
+//					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+					zepto_response_to_request( mem_h );
+					siot_mesh_unicast_packet_to_root_to_tosanta( mem_h );
 					pending_resends[oldest_index].resend_cnt = 0;
 					ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): packet is abuot to be sent as \'to santa\' (resent cnt = %d, shecksum = %04x)  ###########\n", pending_resends[oldest_index].resend_cnt, pending_resends[oldest_index].checksum );
 				}
@@ -3790,21 +3862,23 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 
 	if ( packet_ready )
 		return SIOT_MESH_RET_PASS_TO_SEND;
+#endif
 
 	if ( siot_mesh_last_hop_data_storage_is_time_to_send( 0, currt, &(wf->wait_time) ) )
 	{
 		siot_mesh_form_packet_to_santa( mem_h, 0 );
+		ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_timer(): sending collected by \"from-santa\", slot: 0  ###########\n" );
 		return SIOT_MESH_RET_PASS_TO_SEND;
 	}
 
 	if ( siot_mesh_last_hop_data_storage_is_time_to_send( 1, currt, &(wf->wait_time) ) )
 	{
 		siot_mesh_form_packet_to_santa( mem_h, 1 );
+		ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_timer(): sending collected by \"from-santa\", slot: 1  ###########\n" );
 		return SIOT_MESH_RET_PASS_TO_SEND;
 	}
 
 	return SIOT_MESH_RET_OK;
-#endif
 }
 
 uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint8_t mesh_val, uint8_t resend_cnt, uint16_t target_id, uint16_t* bus_id )
@@ -3814,38 +3888,53 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
 	if ( ret_code == SIOT_MESH_RET_OK )
 	{
+		ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_send_packet(): known route (resend count: %d)  ###########\n", resend_cnt );
 		if ( resend_cnt < SIOT_MESH_SUBJECT_FOR_ACK )
 		{
 			uint16_t checksum;
 			siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, target_id, false, &checksum );
-			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_send_packet(): known route (resend count: %d)  ###########\n", resend_cnt );
+			return SIOT_MESH_RET_PASS_TO_SEND;
 		}
 		else
 		{
 #ifdef USED_AS_RETRANSMITTER
 			uint16_t checksum;
 			siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, target_id, true, &checksum );
-//			siot_mesh_add_resend_task( mem_h, MESH_PENDING_RESEND_TYPE_SELF_PACKET, currt, checksum, target_id, &(wf->wait_time) );
 
 			SIOT_MESH_LINK link;
 			uint8_t ret_code = siot_mesh_get_link( link_id, &link );
 			ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK ); // we do not expect that being here we have an invalid link_id
 			ZEPTO_DEBUG_ASSERT( link.LINK_ID == link_id );
-			siot_mesh_add_resend_task( mem_h/*, MESH_PENDING_RESEND_TYPE_SELF_PACKET*/, currt, checksum, target_id, link.BUS_ID, link.NEXT_HOP, &(wf->wait_time) );
+			siot_mesh_add_resend_task( mem_h, currt, checksum, target_id, link.BUS_ID, link.NEXT_HOP, &(wf->wait_time) );
 #else // USED_AS_RETRANSMITTER
 			uint16_t checksum;
 			siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, target_id, true, &checksum );
 			ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_send_packet(): yet known route, requesting ACK (resend count: %d, shecksum = %04x)  ###########\n", resend_cnt, checksum );
+			SIOT_MESH_LINK link;
+			uint8_t ret_code = siot_mesh_get_link( link_id, &link );
+			ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK ); // we do not expect that being here we have an invalid link_id
+			ZEPTO_DEBUG_ASSERT( link.LINK_ID == link_id );
+
+			uint8_t free_slot;
 
 			ZEPTO_DEBUG_ASSERT( PENDING_RESENDS_MAX == 2 );
-			ZEPTO_DEBUG_ASSERT( pending_resends[0].resend_cnt == 0 || pending_resends[1].resend_cnt == 0 );
-			uint8_t free_slot = pending_resends[0].resend_cnt == 0 ? 0 : 1;
+			if ( pending_resends[0].resend_cnt == 0 || pending_resends[1].resend_cnt == 0 )
+				free_slot = pending_resends[0].resend_cnt == 0 ? 0 : 1;
+			else
+			{
+				free_slot = pending_resends[0].resend_cnt <= pending_resends[1].resend_cnt ? 0 : 1;
+				pending_resends[free_slot].resend_cnt = 0;
+				zepto_parser_free_memory( pending_resends[free_slot].packet_h );
+			}
+
 			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_send_packet(): free slot = %d  ###########\n", free_slot );
+			ZEPTO_DEBUG_ASSERT( pending_resends[free_slot].resend_cnt == 0 );
 			ZEPTO_DEBUG_ASSERT( memory_object_get_request_size( pending_resends[free_slot].packet_h ) == 0 );
 			ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( pending_resends[free_slot].packet_h ) == 0 );
-			zepto_copy_request_to_response_of_another_handle( mem_h, pending_resends[free_slot].packet_h ); // create our own copy
+			zepto_copy_response_to_response_of_another_handle( mem_h, pending_resends[free_slot].packet_h ); // create our own copy
 			zepto_response_to_request( pending_resends[free_slot].packet_h );
 			pending_resends[free_slot].checksum = checksum;
+			pending_resends[free_slot].bus_id = link.BUS_ID;
 			pending_resends[free_slot].resend_cnt = SIOT_MESH_SUBJECT_FOR_MESH_RESEND;
 			sa_time_val diff_tval;
 			TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
@@ -3863,19 +3952,18 @@ uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMO
 
 #endif // USED_AS_RETRANSMITTER
 		}
-		return SIOT_MESH_RET_OK;
+		return SIOT_MESH_RET_PASS_TO_SEND;
 	}
 	else
 	{
 		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
+		ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_send_packet(): UNKNOWN route (resend count: %d)  ###########\n", resend_cnt );
 
-		// TODO: what link to use????
 		siot_mesh_form_packet_to_santa( mem_h, mesh_val );
+		// TODO: iterate over all buses
+
+		return SIOT_MESH_RET_PASS_TO_SEND;
 	}
-
-
-
-	return SIOT_MESH_RET_OK;
 }
 
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val )
