@@ -192,6 +192,8 @@ uint8_t handler_sagdp_receive_up( const sa_time_val* currt, waiting_for* wf, sas
 
 	INCREMENT_COUNTER( 21, "handler_sagdp_receive_up()" );
 
+	*resend_cnt = 0; // as an initial assumption
+
 	// init parser object
 	parser_obj po;
 	zepto_parser_init( &po, mem_h );
@@ -1065,6 +1067,8 @@ uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, wait
 	// SAGDP can legitimately receive a repeated packet in wait-remote state (the other side sounds like "we have not received anything from you; please resend, only then we will probably send you something new")
 	// LSP must be resent
 
+	*resend_cnt = 0; // as an initial assumption
+
 	parser_obj po_lsm;
 	zepto_parser_init( &po_lsm, MEMORY_HANDLE_SAGDP_LSM );
 	if ( zepto_parsing_remaining_bytes( &po_lsm ) == 0 )
@@ -1141,10 +1145,12 @@ uint8_t handler_sagdp_receive_request_resend_lsp( const sa_time_val* currt, wait
 	}
 }
 
-uint8_t handler_sagdp_receive_hlp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data )
+uint8_t handler_sagdp_receive_hlp( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data, uint8_t* resend_cnt )
 {
 	// It is a responsibility of a higher level to report the status of a packet.
 	//
+
+	*resend_cnt = 0; // as an initial assumption
 
 	// init parser object
 	parser_obj po;

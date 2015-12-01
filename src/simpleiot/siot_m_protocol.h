@@ -94,7 +94,7 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 // internal errors (TODO: should not be exposed)
 #define SIOT_MESH_RET_ERROR_NOT_FOUND 16
 #define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 17
-#define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 17
+#define SIOT_MESH_RET_ERROR_ROUTE_UNDER_CONSTRUCTION 18
 
 
 
@@ -102,10 +102,10 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 
 #define SIOT_MESH_SUBJECT_FOR_ACK 2
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND 5
-#define MESH_RESEND_PERIOD_MS 100
+#define MESH_RESEND_PERIOD_MS 500
 
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint8_t conn_quality, uint8_t error_cnt );
-uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, uint16_t target_id, MEMORY_HANDLE mem_h, uint8_t resend_cnt, uint16_t* bus_id );
+uint8_t handler_siot_mesh_send_packet( uint8_t is_ctr, sa_time_val* currt, waiting_for* wf, uint16_t target_id, MEMORY_HANDLE mem_h, uint8_t resend_cnt, uint16_t* bus_id );
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* device_id, uint16_t* bus_id );
 void handler_siot_mesh_process_route_update_response(  uint16_t source_dev_id, MEMORY_HANDLE mem_h );
 
@@ -133,8 +133,8 @@ uint16_t write_retransmitter_list_for_from_santa_packet( MEMORY_HANDLE mem_h );
 
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
 uint8_t siot_mesh_get_link( uint16_t link_id, SIOT_MESH_LINK* link );
-void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id ); // generates route table updates
-void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id );
+void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id, uint16_t next_hop_id ); // generates route table updates
+void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id, uint16_t failed_target_id );
 
 void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t target_id );
 
@@ -146,9 +146,9 @@ void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_a
 uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h, uint16_t* recipient );
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id );
 
-void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, uint16_t bus_id, sa_time_val* time_to_next_event );
+void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, uint16_t bus_id, uint16_t next_hop_id, sa_time_val* time_to_next_event );
 void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t bus_id );
-uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, uint16_t* bus_id, sa_time_val* time_to_next_event );
+uint8_t siot_mesh_at_root_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t* target_id, uint16_t* bus_id, uint16_t* next_hop_id, sa_time_val* time_to_next_event );
 void siot_mesh_at_root_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val* currt, sa_time_val* time_to_next_event );
 void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, const sa_time_val* currt, sa_time_val* time_to_next_event );
 
@@ -164,7 +164,7 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 #define SIOT_MESH_SUBJECT_FOR_ACK 2
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND 5
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND_UNICAST_IN_TRANSIT 4
-#define MESH_RESEND_PERIOD_MS 100
+#define MESH_RESEND_PERIOD_MS 500
 #define MESH_RFEPLY_TO_FROMSANTA_PERIOD_MS_MAX 500
 
 void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
