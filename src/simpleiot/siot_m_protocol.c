@@ -426,7 +426,7 @@ void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_
 	SA_TIME_SET_ZERO_TIME( *time_to_next_event );
 }
 
-void siot_mesh_at_root_add_resend_unicast_task( MEMORY_HANDLE packet, const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t target_id, uint16_t bus_id, uint16_t next_hop )
+void siot_mesh_at_root_add_resend_unicast_task( MEMORY_HANDLE packet, const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t target_id, uint16_t bus_id, uint16_t next_hop, uint16_t checksum )
 {
 	// 1. add resend task
 	MESH_PENDING_RESENDS resend;
@@ -436,6 +436,7 @@ void siot_mesh_at_root_add_resend_unicast_task( MEMORY_HANDLE packet, const sa_t
 	resend.target_id = target_id;
 	resend.next_hop = next_hop;
 	resend.resend_cnt = SIOT_MESH_SUBJECT_FOR_MESH_RESEND_UNICAST_IN_TRANSIT;
+	resend.checksum = checksum;
 	sa_time_val diff_tval;
 	TIME_MILLISECONDS16_TO_TIMEVAL( MESH_RESEND_PERIOD_MS, diff_tval );
 	sa_hal_time_val_copy_from( &(resend.next_resend_time), currt );
@@ -656,6 +657,8 @@ void siot_mesh_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val*
 	sa_time_val oldest_time_point;
 	sa_hal_time_val_copy_from( &oldest_time_point, currt );
 
+	ZEPTO_DEBUG_PRINTF_2( "\nRequest tasks @siot_mesh_remove_resend_task_by_hash( checksum = 0x%04x )...", checksum );
+
 	if ( zepto_memman_get_currently_allocated_size_for_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER ) == 0 )
 		return;
 
@@ -674,6 +677,7 @@ void siot_mesh_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val*
 			if ( gap )	zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset - gap, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
 	}
 	if ( gap )	zepto_memman_trim_locally_generated_data_at_right( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, gap );
+	ZEPTO_DEBUG_PRINTF_1( gap ? "found and removed\n" : "FAILED TO FIND\n" );
 
 	// now we calculate remaining time for only actually remaining tasks
 	ZEPTO_DEBUG_PRINTF_1( "\nRequest tasks @siot_mesh_remove_resend_task_by_hash():\n" );
@@ -682,7 +686,7 @@ void siot_mesh_remove_resend_task_by_hash( uint16_t checksum, const sa_time_val*
 		if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
 			break;
 		sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
-		ZEPTO_DEBUG_PRINTF_6( "%04x%04x: target: %d, packet_h:%d, resend_cnt: %d\n", resend.next_resend_time.high_t, resend.next_resend_time.low_t, resend.bus_id, resend.packet_h, resend.resend_cnt );
+		ZEPTO_DEBUG_PRINTF_6( "    %04x%04x: target: %d, packet_h:%d, resend_cnt: %d\n", resend.next_resend_time.high_t, resend.next_resend_time.low_t, resend.bus_id, resend.packet_h, resend.resend_cnt );
 	}
 }
 
@@ -1011,7 +1015,9 @@ void siot_mesh_form_ack_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_
 	zepto_parser_encode_and_append_uint16( mem_h, num_err );
 
 	// ACK-CHESKSUM
-	zepto_parser_encode_and_append_uint16( mem_h, ack_checksum );
+//	zepto_parser_encode_and_append_uint16( mem_h, ack_checksum );
+	zepto_write_uint8( mem_h, (uint8_t)ack_checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(ack_checksum>>8) );
 
 	// HEADER-CHECKSUM
 	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
@@ -3662,7 +3668,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 					if ( ack_requested ) // we need to add it to the list of resend tasks
 					{
-						siot_mesh_at_root_add_resend_unicast_task( mem_h, currt, &(wf->wait_time), target_id, link.BUS_ID, link.NEXT_HOP );
+						siot_mesh_at_root_add_resend_unicast_task( mem_h, currt, &(wf->wait_time), target_id, link.BUS_ID, link.NEXT_HOP, packet_checksum );
 
 						zepto_parser_free_memory( mem_ack_h );
 						uint8_t ret_code = siot_mesh_get_bus_id_for_target( last_hop, ack_bus_id );
@@ -3831,7 +3837,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 				if ( ret_code1 == SIOT_MESH_RET_OK ) // we have a route to root
 				{
 					*bus_id = link.BUS_ID;
-					siot_mesh_at_root_add_resend_unicast_task( mem_h, currt, &(wf->wait_time), 0, link.BUS_ID, link.NEXT_HOP );
+					siot_mesh_at_root_add_resend_unicast_task( mem_h, currt, &(wf->wait_time), 0, link.BUS_ID, link.NEXT_HOP, packet_checksum );
 				}
 				else
 				{
