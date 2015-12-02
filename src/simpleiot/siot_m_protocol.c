@@ -1373,7 +1373,7 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HAND
 
 uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h, uint16_t* recipient )
 {
-	uint8_t ret_code;
+/*	uint8_t ret_code;
 	uint16_t flags = 0;
 
 	// TEMPORARY CODE: add ccp staff
@@ -1394,7 +1394,8 @@ uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h, uint16_t* r
 	zepto_write_uint8( mem_h, 0 );
 	zepto_write_uint8( mem_h, 0 );
 
-	return SIOT_MESH_RET_OK;
+	return SIOT_MESH_RET_OK;*/
+	return siot_mesh_at_root_load_update_to_packet( mem_h, recipient );
 }
 
 void handler_siot_mesh_process_route_update_response( uint16_t source_dev_id, MEMORY_HANDLE mem_h )
