@@ -1769,7 +1769,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					uint16_t original_packet_checksum = zepto_parse_encoded_uint16( &po );
 
 					// TODO: think about potential cases, say, an error is reported based on the old state of the routing table while a new one is already in effect (may require more data to be added to the packet)
-					siot_mesh_at_root_remove_link_to_target_route_error_reported( reporting_device_id, failed_hop_id, failed_target );
+					siot_mesh_at_root_remove_link_to_target_route_error_reported( reporting_device_id, failed_hop_id, failed_target, true );
 					//+++++TODO: are there any other items to be scheduled/removed?
 					return SIOT_MESH_RET_OK;
 				}
@@ -3360,7 +3360,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 			}
 #endif // USED_AS_RETRANSMITTER
 #ifdef USED_AS_RETRANSMITTER
-			case SIOT_MESH_ROUTING_ERROR_PACKET: // we should just forward it to the root
+			case SIOT_MESH_ROUTING_ERROR_PACKET: // we should forward it to the root and send ACK to sender
 			{
 				// Hmp-Routing-Error-Packet: | HMP-ROUTING-ERROR-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST_HOP | ERROR-CODE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 				// we start from an optimistic assumption that the packet is integral
@@ -3469,17 +3469,18 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 
 				uint8_t ret_code = siot_mesh_get_bus_id_to_root( bus_id );
-				if ( ret_code == SIOT_MESH_RET_OK )
+				if ( ret_code == SIOT_MESH_RET_OK ) // known way to root
 				{
 					zepto_parser_free_memory( mem_ack_h );
 					ret_code = siot_mesh_get_bus_id_for_target( last_hop, ack_bus_id );
 					if ( ret_code == SIOT_MESH_RET_OK )
-					{
 						siot_mesh_form_ack_packet( mem_ack_h, last_hop, error_cnt, reported_checksum );
-						return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_SEND;
-					}
 					else
-						return SIOT_MESH_RET_PASS_TO_SEND;
+					{
+						uint16_t packet_checksum;
+						siot_mesh_form_routing_error_packet( mem_ack_h, last_hop, last_hop, 0, &packet_checksum );
+					}
+					return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
 				}
 				else
 				{
@@ -3609,9 +3610,9 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 			// questions to be asked: "is this packet for us?"; "is this packet through us?" If none is "YES", ignore the packet
 			if ( target_id == DEVICE_SELF_ID ) // for us
 			{
-				if ( !is_from_root ) // well, from us (looks like this packet is heavily misdirected) TODO: should we perform any action?
+				if ( !is_from_root ) // well, for us but not from root (looks like this packet is heavily misdirected) TODO: should we perform any action?
 				{
-					ZEPTO_DEBUG_PRINTF_1( "Packet directed from US to ROOT received; ignored\n" );
+					ZEPTO_DEBUG_PRINTF_1( "Packet directed to us NOT from ROOT received; ignored\n" );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
 
@@ -3629,11 +3630,22 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						siot_mesh_form_ack_packet( mem_ack_h, last_hop, error_cnt, packet_reported_checksum );
 						return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
 					}
-					else
+					else // routing error, anyway; report it
 					{
-						// TODO: should we send a siot_mesh_form_routing_error_packet() ?
-						return SIOT_MESH_RET_PASS_TO_PROCESS;
+						uint8_t ret_code1 = siot_mesh_get_bus_id_to_root( ack_bus_id );
+						if ( ret_code == SIOT_MESH_RET_OK )
+						{
+//							siot_mesh_form_ack_packet( mem_ack_h, last_hop, error_cnt, packet_reported_checksum );
+							uint16_t packet_checksum;
+							siot_mesh_form_routing_error_packet( mem_ack_h, last_hop, last_hop, packet_reported_checksum, &packet_checksum );
+							return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
+						}
+						else
+						{
+							siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF );
+						}
 					}
+					return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
 				}
 				else
 					return SIOT_MESH_RET_PASS_TO_PROCESS;
@@ -3656,7 +3668,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				uint16_t link_id;
 				uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
-				if ( ret_code == SIOT_MESH_RET_OK )
+				if ( ret_code == SIOT_MESH_RET_OK ) // known root
 				{
 					SIOT_MESH_LINK link;
 					uint8_t ret_code = siot_mesh_get_link( link_id, &link );
@@ -3666,7 +3678,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 					siot_mesh_rebuild_unicast_packet_for_forwarding( mem_h, is_from_root, non_root_addr, &packet_checksum, false );
 
-					if ( ack_requested ) // we need to add it to the list of resend tasks
+					if ( ack_requested ) // in all cases we will have to send two packets...
 					{
 						siot_mesh_at_root_add_resend_unicast_task( mem_h, currt, &(wf->wait_time), target_id, link.BUS_ID, link.NEXT_HOP, packet_checksum );
 
@@ -3675,16 +3687,37 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						if ( ret_code == SIOT_MESH_RET_OK )
 						{
 							siot_mesh_form_ack_packet( mem_ack_h, last_hop, error_cnt, packet_reported_checksum );
-							return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_SEND;
 						}
 						else
 						{
-							// TODO: should we send a siot_mesh_form_routing_error_packet() ?
-							return SIOT_MESH_RET_PASS_TO_SEND;
+							if ( is_from_root ) // we would send an ACK in the opposite direction (that is, to root); we lost that direction; thus, we have to send To-Santa
+							{
+								siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF );
+							}
+							else // we would send an ACK in the opposite direction (that is, from root); we lost that direction; thus, we have to send routing error
+							{
+								// send a routing error
+								// add to resend list
+								SIOT_MESH_LINK link;
+								uint8_t ret_code1 = siot_mesh_get_link_to_root( &link );
+								if ( ret_code1 == SIOT_MESH_RET_OK ) // we have a route to root
+								{
+									*bus_id = link.BUS_ID;
+									siot_mesh_form_routing_error_packet( mem_ack_h, last_hop, last_hop, packet_reported_checksum, &packet_checksum );
+									siot_mesh_at_root_add_resend_unicast_task( mem_ack_h, currt, &(wf->wait_time), 0, link.BUS_ID, link.NEXT_HOP, packet_checksum );
+								}
+								else
+								{
+									siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF );
+								}
+							}
 						}
+						return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_SEND;
 					}
-					else
+					else // no ACK required
+					{
 						return SIOT_MESH_RET_PASS_TO_SEND;
+					}
 				}
 				else
 				{
@@ -3831,7 +3864,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			{
 				uint16_t packet_checksum;
 				siot_mesh_form_routing_error_packet( mem_h, info.next_hop, info.target_id, info.checksum, &packet_checksum );
-				// TODO: add to resend list
+				// add to resend list
 				SIOT_MESH_LINK link;
 				uint8_t ret_code1 = siot_mesh_get_link_to_root( &link );
 				if ( ret_code1 == SIOT_MESH_RET_OK ) // we have a route to root
@@ -3841,9 +3874,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 				}
 				else
 				{
-
-					/// TODO: should we send a To-Santa packet in this case?
-					// siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
 				}
 			}
 			return SIOT_MESH_RET_PASS_TO_SEND;
