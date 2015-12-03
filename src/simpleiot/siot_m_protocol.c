@@ -4176,6 +4176,12 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 			case DELETE_ROUTE_ENTRY:
 			{
 				uint16_t target_id = entry_header >> 3; // bits[3..] equal to TARGET-ID
+				ret_code = siot_mesh_delete_route( target_id );
+				if ( ret_code != SIOT_MESH_RET_OK )
+				{
+					ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_OUT_OF_RANGE );
+					ZEPTO_DEBUG_ASSERT( 0 == "Link to be removed is not found; error reporting is not yet implemented" );
+				}
 				break;
 			}
 		}
