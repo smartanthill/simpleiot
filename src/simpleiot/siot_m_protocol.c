@@ -146,11 +146,94 @@ void siot_mesh_init_at_life_start()
 	siot_mesh_route_table_size = 0;
 }
 
+#ifdef SA_DEBUG
+void print_tables()
+{
+	ZEPTO_DEBUG_PRINTF_1( "\n     Route table = {" );
+	uint16_t i;
+	for ( i=0; i<siot_mesh_route_table_size; i++ )
+		ZEPTO_DEBUG_PRINTF_3( "(%d, %d) ", siot_mesh_route_table[i].TARGET_ID, siot_mesh_route_table[i].LINK_ID );
+	ZEPTO_DEBUG_PRINTF_1( "}\n" );
+
+	ZEPTO_DEBUG_PRINTF_1( "      Link table = {" );
+	for ( i=0; i<siot_mesh_link_table_size; i++ )
+		ZEPTO_DEBUG_PRINTF_4( "(%d, %d, %d) ", siot_mesh_link_table[i].LINK_ID, siot_mesh_link_table[i].NEXT_HOP, siot_mesh_link_table[i].BUS_ID );
+	ZEPTO_DEBUG_PRINTF_1( "}\n\n" );
+}
+
+void validate_tables()
+{
+	uint16_t i, j;
+
+	// target IDs in the route table are in increasing order
+	for ( i=1; i<siot_mesh_route_table_size; i++ )
+	{
+		bool ordered = siot_mesh_route_table[ i - 1 ].TARGET_ID < siot_mesh_route_table[ i ].TARGET_ID;
+if ( !ordered )
+{
+	ordered = ordered;
+}
+		ZEPTO_DEBUG_ASSERT( ordered );
+	}
+
+	// link IDs in the link table are in increasing order
+	for ( i=1; i<siot_mesh_link_table_size; i++ )
+	{
+		bool ordered = siot_mesh_link_table[ i - 1 ].LINK_ID < siot_mesh_link_table[ i ].LINK_ID;
+if ( !ordered )
+{
+	ordered = ordered;
+}
+		ZEPTO_DEBUG_ASSERT( ordered );
+	}
+
+	// link ID in the route table correspond to an entry in the link table
+	for ( i=0; i<siot_mesh_route_table_size; i++ )
+	{
+		bool found = false;
+		for ( j=0; j<siot_mesh_link_table_size; j++ )
+			if ( siot_mesh_route_table[i].LINK_ID == siot_mesh_link_table[j].LINK_ID )
+			{
+				found = true;
+				break;
+			}
+		if ( ! found )
+		{
+			ZEPTO_DEBUG_ASSERT( 0 == "LINK_ID in the route table corresponds to nothing in the link table" );
+		}
+	}
+
+	// all links in the link table are in use
+	for ( i=0; i<siot_mesh_link_table_size; i++ )
+	{
+		bool found = false;
+		for ( j=0; j<siot_mesh_route_table_size; j++ )
+			if ( siot_mesh_route_table[j].LINK_ID == siot_mesh_link_table[i].LINK_ID )
+			{
+				found = true;
+				break;
+			}
+		if ( ! found )
+		{
+			ZEPTO_DEBUG_ASSERT( 0 == "LINK_ID in the link table corresponds to nothing in the route table" );
+		}
+	}
+}
+#else // SA_DEBUG
+#define print_tables()
+#defive validate_tables()
+#endif // SA_DEBUG
+
 // TODO: for terminating device below processing is much easier!!! Reimplement!!!
 
-void siot_mesh_clear_rout_table()
+void siot_mesh_clear_route_table()
 {
 	siot_mesh_route_table_size = 0;
+}
+
+void siot_mesh_clear_link_table()
+{
+	siot_mesh_link_table_size = 0;
 }
 
 uint8_t siot_mesh_target_to_link_id( uint16_t target_id, uint16_t* link_id )
@@ -756,6 +839,22 @@ typedef struct _SIOT_MESH_LINK_TO_ROOT_AT_TERMINAL_DEVICE
 
 SIOT_MESH_LINK_TO_ROOT_AT_TERMINAL_DEVICE link_to_root;
 
+#ifdef SA_DEBUG
+void print_tables()
+{
+	if ( link_to_root.valid )
+		ZEPTO_DEBUG_PRINTF_3( "\n     Route/Link table = { valid: (nh: %d, bus: %d) }\n\n", link_to_root.NEXT_HOP, link_to_root.BUS_ID );
+	else
+		ZEPTO_DEBUG_PRINTF_1( "\n     Route/Link table = { invalid }\n\n" );
+}
+void validate_tables()
+{
+}
+#else // SA_DEBUG
+#define print_tables()
+#defive validate_tables()
+#endif // SA_DEBUG
+
 void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
 {
 	link_to_root.valid = 0;
@@ -766,7 +865,12 @@ void siot_mesh_init_at_life_start()
 	link_to_root.valid = 0;
 }
 
-void siot_mesh_clear_rout_table()
+void siot_mesh_clear_route_table()
+{
+	link_to_root.valid = 0;
+}
+
+void siot_mesh_clear_link_table()
 {
 	link_to_root.valid = 0;
 }
@@ -1486,6 +1590,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		uint8_t ret_code = siot_mesh_at_root_find_best_route( &target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
 		if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
 		{
+			ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_in_data( target_id = %d, bus_id_at_target = %d, id_from = %d, id_next = %d ) returns OK; calling siot_mesh_at_root_add_updates_for_device_when_route_is_added()...\n",  target_id, bus_id_at_target, id_from, id_next );
 			siot_mesh_at_root_remove_last_hop_data( target_id );
 			ret_code = siot_mesh_at_root_add_updates_for_device_when_route_is_added( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
 			hop_data_added = true;
@@ -4083,10 +4188,15 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 
 	// TODO: we also assume that there is no optional header
 	// TODO: check spec regarding optional headers
+print_tables();
+validate_tables();
 
 	// OPTIONAL-ORIGINAL-RT-CHECKSUM and discarding table
 	if ( discard_rt ) // bit[0] being DISCARD-RT-FIRST (indicating that before processing MODIFICATIONS-LIST, the whole Routing Table must be discarded)
-		siot_mesh_clear_rout_table();
+	{
+		siot_mesh_clear_route_table();
+		siot_mesh_clear_link_table();
+	}
 	else
 	{
 		uint16_t checksum_before_calc = siot_mesh_calculate_route_table_checksum();
@@ -4200,6 +4310,8 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 
 	// if we're here, everything is fine, and we report no error
 	zepto_parser_encode_and_append_uint8( reply, 0 ); // no error
+print_tables();
+validate_tables();
 }
 
 #endif // USED_AS_MASTER
