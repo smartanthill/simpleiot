@@ -103,6 +103,27 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 
 #else // USED_AS_MASTER
 
+static void update_fletcher_checksum_16( uint8_t bt, uint16_t* state )
+{
+	// quick and dirty solution
+	// TODO: implement
+	uint8_t tmp = (uint8_t)(*state);
+	uint8_t tmp1 = (*state) >> 8;
+	tmp += bt;
+	if ( tmp < bt )
+		tmp += 1;
+	if ( tmp == 0xFF )
+		tmp = 0;
+	tmp1 += tmp;
+	if ( tmp1 < tmp )
+		tmp1 += 1;
+	if ( tmp1 == 0xFF )
+		tmp1 = 0;
+	*state = tmp1;
+	*state <<= 8;
+	*state += tmp;
+}
+
 #ifdef USED_AS_RETRANSMITTER
 
 typedef struct _MESH_PENDING_RESENDS
@@ -417,9 +438,39 @@ uint8_t siot_mesh_add_route( uint16_t target_id, uint16_t link_id )
 	return SIOT_MESH_RET_OK;
 }
 
+void update_checksum_with_route_entry( SIOT_MESH_ROUTE* rt, uint16_t* state )
+{
+	update_fletcher_checksum_16( (uint8_t)(rt->TARGET_ID), state );
+	update_fletcher_checksum_16( (uint8_t)(rt->TARGET_ID >> 8), state );
+	update_fletcher_checksum_16( (uint8_t)(rt->LINK_ID), state );
+	update_fletcher_checksum_16( (uint8_t)(rt->LINK_ID >> 8), state );
+}
+
+void update_checksum_with_link_entry( SIOT_MESH_LINK* lt, uint16_t* state )
+{
+	update_fletcher_checksum_16( (uint8_t)(lt->LINK_ID), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->LINK_ID >> 8), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->BUS_ID), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->BUS_ID >> 8), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->NEXT_HOP), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->NEXT_HOP >> 8), state );
+
+	// TODO: add other members
+	/*update_fletcher_checksum_16( (uint8_t)(lt->INTRA_BUS_ID), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->INTRA_BUS_ID >> 8), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->INTRA_BUS_ID >> 16), state );
+	update_fletcher_checksum_16( (uint8_t)(lt->INTRA_BUS_ID >> 24), state );*/
+}
+
 uint16_t siot_mesh_calculate_route_table_checksum()
 {
-	return 0;
+	uint16_t ret = 0;
+	uint16_t i;
+	for ( i=0; i<siot_mesh_route_table_size; i++ )
+		update_checksum_with_route_entry( siot_mesh_route_table + i, &ret );
+	for ( i=0; i<siot_mesh_link_table_size; i++ )
+		update_checksum_with_link_entry( siot_mesh_link_table + i, &ret );
+	return ret;
 }
 
 #define MESH_PENDING_RESEND_TYPE_SELF_PACKET 0
@@ -855,6 +906,28 @@ void validate_tables()
 #defive validate_tables()
 #endif // SA_DEBUG
 
+uint16_t siot_mesh_calculate_route_table_checksum()
+{
+	if ( !link_to_root.valid )
+		return 0;
+	uint16_t state = 0;
+	update_fletcher_checksum_16( 0, &state ); // target_id
+	update_fletcher_checksum_16( 0, &state );
+	update_fletcher_checksum_16( 0, &state ); // link_id
+	update_fletcher_checksum_16( 0, &state );
+
+	// link data
+	update_fletcher_checksum_16( 0, &state ); // link_id
+	update_fletcher_checksum_16( 0, &state );
+	update_fletcher_checksum_16( (uint8_t)(link_to_root.BUS_ID), &state );
+	update_fletcher_checksum_16( (uint8_t)(link_to_root.BUS_ID >> 8), &state );
+	update_fletcher_checksum_16( (uint8_t)(link_to_root.NEXT_HOP), &state );
+	update_fletcher_checksum_16( (uint8_t)(link_to_root.NEXT_HOP >> 8), &state );
+	// TODO: add other members
+
+	return state;
+}
+
 void siot_mesh_init_tables()  // TODO: this call reflects current development stage and may or may not survive in the future
 {
 	link_to_root.valid = 0;
@@ -947,11 +1020,6 @@ uint8_t siot_mesh_add_route( uint16_t target_id, uint16_t link_id )
 	ZEPTO_DEBUG_ASSERT( target_id == 0 );
 	ZEPTO_DEBUG_ASSERT( link_id == 0 );
 	return SIOT_MESH_RET_OK;
-}
-
-uint16_t siot_mesh_calculate_route_table_checksum()
-{
-	return 0;
 }
 
 #define PENDING_RESENDS_MAX 2 // WARNING: if changed, have more handles (at least, potentially)!
@@ -1508,14 +1576,15 @@ void handler_siot_mesh_process_route_update_response( uint16_t source_dev_id, ME
 	zepto_parser_init( &po, mem_h );
 	uint8_t main_byte = zepto_parse_uint8( &po );
 	ZEPTO_DEBUG_PRINTF_3( "PROCESS_ROUTE_UPDATE_RESPONSE(): from dev %d, main_byte = %d\n", source_dev_id, main_byte );
-	if ( main_byte == 0 )
+	if ( main_byte == SIOT_MESH_TABLE_UPDATE_RET_CODE_OK )
 	{
 		// we remove the latest update to this device from collection of updates
 		siot_mesh_at_root_update_done( source_dev_id );
 	}
 	else
 	{
-		ZEPTO_DEBUG_ASSERT( 0 == "Route table update error processing is not yet implemented" );
+		ZEPTO_DEBUG_PRINTF_2( "Route table update error processing failed at device %d", source_dev_id );
+		siot_mesh_at_root_update_failed( source_dev_id );
 	}
 }
 
@@ -4204,8 +4273,9 @@ validate_tables();
 		checksum_before_read |= ((uint16_t)zepto_parse_uint8( po )) << 8;
 		if ( checksum_before_read != checksum_before_calc )
 		{
-			ZEPTO_DEBUG_PRINTF_3( "Bad route table checksum: claimed 0x%04x, calculated: 0x%04x\n", checksum_before_read, checksum_before_calc );
-			ZEPTO_DEBUG_ASSERT( 0 == "Reporting Bad route table checksum is not yet implemented" );
+			ZEPTO_DEBUG_PRINTF_3( "Bad route table checksum: expected 0x%04x, calculated: 0x%04x\n", checksum_before_read, checksum_before_calc );
+			ZEPTO_DEBUG_PRINTF_1( "bad route table checksum detected after applying update" );
+			zepto_parser_encode_and_append_uint8( reply, SIOT_MESH_TABLE_UPDATE_RET_CODE_CHECKSUM_BEFORE_FAILED );
 			return;
 		}
 	}
@@ -4304,12 +4374,13 @@ validate_tables();
 	checksum_before_read |= ((uint16_t)zepto_parse_uint8( po )) << 8;
 	if ( checksum_before_read != checksum_before_calc )
 	{
-		ZEPTO_DEBUG_ASSERT( 0 == "Reporting Bad route table checksum is not yet implemented" );
+		ZEPTO_DEBUG_PRINTF_3( "bad route table checksum detected after applying update: expected 0x%04x, calculated: 0x%04x\n", checksum_before_read, checksum_before_calc );
+		zepto_parser_encode_and_append_uint8( reply, SIOT_MESH_TABLE_UPDATE_RET_CODE_CHECKSUM_AFTER_FAILED );
 		return;
 	}
 
 	// if we're here, everything is fine, and we report no error
-	zepto_parser_encode_and_append_uint8( reply, 0 ); // no error
+	zepto_parser_encode_and_append_uint8( reply, SIOT_MESH_TABLE_UPDATE_RET_CODE_OK ); // no error
 print_tables();
 validate_tables();
 }

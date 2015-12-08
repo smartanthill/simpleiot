@@ -38,11 +38,17 @@ extern uint16_t DEVICE_SELF_ID;
 #define SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK 2
 #define SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP 3
 #define SIOT_MESH_TTL_MAX 4
+
 // Route table MODIFICATIONS-LIST entry types
 #define ADD_OR_MODIFY_LINK_ENTRY 0
 #define DELETE_LINK_ENTRY 1
 #define ADD_OR_MODIFY_ROUTE_ENTRY 2
 #define DELETE_ROUTE_ENTRY 3
+
+#define SIOT_MESH_TABLE_UPDATE_RET_CODE_OK 0
+#define SIOT_MESH_TABLE_UPDATE_RET_CODE_CHECKSUM_BEFORE_FAILED 1
+#define SIOT_MESH_TABLE_UPDATE_RET_CODE_CHECKSUM_AFTER_FAILED 2
+#define SIOT_MESH_TABLE_UPDATE_RET_CODE_OVERFLOW 3
 
 // SIOT_MESH data structures
 
@@ -145,6 +151,7 @@ uint8_t siot_mesh_at_root_add_updates_for_device_when_route_is_added( uint16_t i
 void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
 uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h, uint16_t* recipient );
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id );
+uint8_t siot_mesh_at_root_update_failed( uint16_t device_id );
 
 void siot_mesh_at_root_add_resend_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, uint16_t bus_id, uint16_t next_hop_id, sa_time_val* time_to_next_event );
 void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_time_val* currt, uint16_t bus_id );
