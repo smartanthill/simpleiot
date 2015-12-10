@@ -374,7 +374,7 @@ uint8_t siot_mesh_remove_link( uint16_t link_id )
 	for ( i=0; i<siot_mesh_link_table_size; i++ )
 		if ( siot_mesh_link_table[i].LINK_ID == link_id )
 		{
-			ZEPTO_MEMMOV( siot_mesh_link_table + i, siot_mesh_link_table + i + 1, sizeof(SIOT_MESH_ROUTE) * ( siot_mesh_link_table_size - i - 1 ) );
+			ZEPTO_MEMMOV( siot_mesh_link_table + i, siot_mesh_link_table + i + 1, sizeof(SIOT_MESH_LINK) * ( siot_mesh_link_table_size - i - 1 ) );
 			siot_mesh_link_table_size--;
 			return SIOT_MESH_RET_OK;
 		}
@@ -466,8 +466,14 @@ uint16_t siot_mesh_calculate_route_table_checksum()
 {
 	uint16_t ret = 0;
 	uint16_t i;
+
+	update_fletcher_checksum_16( (uint8_t)siot_mesh_route_table_size, &ret );
+	update_fletcher_checksum_16( (uint8_t)(((uint16_t)siot_mesh_route_table_size) >> 8), &ret );
 	for ( i=0; i<siot_mesh_route_table_size; i++ )
 		update_checksum_with_route_entry( siot_mesh_route_table + i, &ret );
+
+	update_fletcher_checksum_16( (uint8_t)siot_mesh_link_table_size, &ret );
+	update_fletcher_checksum_16( (uint8_t)(((uint16_t)siot_mesh_link_table_size) >> 8), &ret );
 	for ( i=0; i<siot_mesh_link_table_size; i++ )
 		update_checksum_with_link_entry( siot_mesh_link_table + i, &ret );
 	return ret;
@@ -911,17 +917,22 @@ uint16_t siot_mesh_calculate_route_table_checksum()
 	if ( !link_to_root.valid )
 		return 0;
 	uint16_t state = 0;
+
+	update_fletcher_checksum_16( 1, &state ); // single entry
+	update_fletcher_checksum_16( 0, &state );
 	update_fletcher_checksum_16( 0, &state ); // target_id
 	update_fletcher_checksum_16( 0, &state );
 	update_fletcher_checksum_16( 0, &state ); // link_id
 	update_fletcher_checksum_16( 0, &state );
 
 	// link data
+	update_fletcher_checksum_16( 1, &state ); // single entry
+	update_fletcher_checksum_16( 0, &state );
 	update_fletcher_checksum_16( 0, &state ); // link_id
 	update_fletcher_checksum_16( 0, &state );
-	update_fletcher_checksum_16( (uint8_t)(link_to_root.BUS_ID), &state );
+	update_fletcher_checksum_16( (uint8_t)(link_to_root.BUS_ID), &state ); // bus id
 	update_fletcher_checksum_16( (uint8_t)(link_to_root.BUS_ID >> 8), &state );
-	update_fletcher_checksum_16( (uint8_t)(link_to_root.NEXT_HOP), &state );
+	update_fletcher_checksum_16( (uint8_t)(link_to_root.NEXT_HOP), &state ); // next hop id
 	update_fletcher_checksum_16( (uint8_t)(link_to_root.NEXT_HOP >> 8), &state );
 	// TODO: add other members
 
@@ -1545,28 +1556,6 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HAND
 
 uint8_t handler_siot_mesh_prepare_route_update( MEMORY_HANDLE mem_h, uint16_t* recipient )
 {
-/*	uint8_t ret_code;
-	uint16_t flags = 0;
-
-	// TEMPORARY CODE: add ccp staff
-	zepto_write_uint8( mem_h, 0x5 ); // first, control
-	zepto_write_uint8( mem_h, 0x5 ); // SACCP_PHY_AND_ROUTING_DATA
-
-	zepto_parser_encode_and_append_uint16( mem_h, flags );
-
-	// here we should add initial checksum
-	zepto_write_uint8( mem_h, 0 );
-	zepto_write_uint8( mem_h, 0 );
-
-	ret_code = siot_mesh_at_root_load_update_to_packet( mem_h, recipient );
-	if ( ret_code != SIOT_MESH_RET_OK )
-		return ret_code;
-
-	// here we should add resulting checksum
-	zepto_write_uint8( mem_h, 0 );
-	zepto_write_uint8( mem_h, 0 );
-
-	return SIOT_MESH_RET_OK;*/
 	return siot_mesh_at_root_load_update_to_packet( mem_h, recipient );
 }
 
@@ -2198,8 +2187,8 @@ void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, bool 
 	// TODO: full implementation with VIA fields, etc
 	uint16_t target_id_in_packet = zepto_parse_encoded_uint16( &po ); // just skip
 #ifdef SA_DEBUG
+	ZEPTO_DEBUG_ASSERT( (target_id_in_packet & 1) == 0 ); // TODO: provide full implementation (assuming extra data)
 	target_id_in_packet >>= 1;
-	ZEPTO_DEBUG_ASSERT( (target_id_in_packet & 1) == 0 ); // TODO: provide full implementation
 	ZEPTO_DEBUG_ASSERT( target_id_in_packet == non_root_addr );
 #endif
 	zepto_parser_encode_and_append_uint16( mem_h, non_root_addr << 1 );
@@ -2238,6 +2227,8 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t mesh_val )
 {
 	// Santa Packet structure: | SAMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
+
+	ZEPTO_DEBUG_PRINTF_2( "Forming packet To-Santa, mesh_val = %d\n", mesh_val );
 
 	parser_obj po, po1;
 	uint16_t header;
@@ -3448,8 +3439,11 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( ret_code != SIOT_MESH_RET_OK )
 				{
 					ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
-					ZEPTO_DEBUG_ASSERT( 0 == "Receiving To-Santa by a retransmitter that has no route to root is not implemented. Do it ASAP!" );
-					return 0;
+//					ZEPTO_DEBUG_ASSERT( 0 == "Receiving To-Santa by a retransmitter that has no route to root is not implemented. Do it ASAP!" );
+					// TODO: check whether the approach below is reasonable
+					//       other possible decisions: do nothing, think about adding payload of the initial packet, etc
+					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
 				SIOT_MESH_LINK link;
 				ret_code = siot_mesh_get_link( link_id, &link );
@@ -3973,6 +3967,8 @@ bool siot_mesh_is_toward_root( MEMORY_HANDLE mem_h )
 
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id )
 {
+print_tables();
+validate_tables();
 //	uint16_t link_id;
 #ifdef USED_AS_RETRANSMITTER
 	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
@@ -4154,6 +4150,8 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 
 uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint8_t mesh_val, uint8_t resend_cnt, uint16_t target_id, uint16_t* bus_id )
 {
+print_tables();
+validate_tables();
 	// TODO: what should we do, if the root in the route table, but incoming packet was "from Santa"?
 	uint16_t link_id;
 	uint8_t ret_code = siot_mesh_target_to_link_id( target_id, &link_id );
