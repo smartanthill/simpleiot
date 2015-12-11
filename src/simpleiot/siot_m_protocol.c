@@ -1410,7 +1410,7 @@ if ( target_id == 2 )
 	}
 }
 
-uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HANDLE mem_h, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_hop, uint8_t conn_quality_at_first_receiver, bool payload_present, uint16_t request_id )
+uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( const sa_time_val* currt, MEMORY_HANDLE mem_h, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_hop, uint8_t conn_quality_at_first_receiver, bool payload_present, uint16_t request_id )
 {
 	// here we already know that the packet is good enough
 	parser_obj po, po1, po2;
@@ -1440,7 +1440,7 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HAND
 				uint16_t last_hop_id = header >> 4;
 				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po ); 
 				uint8_t conn_q = zepto_parse_encoded_uint8( &po );
-				siot_mesh_at_root_add_last_hop_in_data( src_id, last_hop_id, last_hop_bus_id, conn_q ); 
+				siot_mesh_at_root_add_last_hop_in_data( currt, request_id, src_id, last_hop_id, last_hop_bus_id, conn_q ); 
 				break;
 			}
 			case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
@@ -1496,7 +1496,7 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( MEMORY_HAND
 #endif // SA_DEBUG
 
 
-	siot_mesh_at_root_add_last_hop_out_data( src_id, bus_id_at_src, first_hop, conn_quality_at_first_receiver );
+	siot_mesh_at_root_add_last_hop_out_data( currt, request_id, src_id, bus_id_at_src, first_hop, conn_quality_at_first_receiver );
 
 	// OPTIONAL-PAYLOAD-SIZE
 
@@ -1645,11 +1645,11 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		uint16_t id_from;
 		uint16_t bus_id_at_prev;
 		uint16_t id_next;
-		uint8_t ret_code = siot_mesh_at_root_find_best_route( &target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
+		uint8_t ret_code = siot_mesh_at_root_find_best_route( currt, &(wf->wait_time), &target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
 		if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
 		{
-			ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_add_last_hop_in_data( target_id = %d, bus_id_at_target = %d, id_from = %d, id_next = %d ) returns OK; calling siot_mesh_at_root_add_updates_for_device_when_route_is_added()...\n",  target_id, bus_id_at_target, id_from, id_next );
-			siot_mesh_at_root_remove_last_hop_data( target_id );
+			ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_find_best_route( target_id = %d, bus_id_at_target = %d, id_from = %d, id_next = %d ) returns OK; calling siot_mesh_at_root_add_updates_for_device_when_route_is_added()...\n",  target_id, bus_id_at_target, id_from, id_next );
+//			siot_mesh_at_root_remove_last_hop_data( target_id );
 			ret_code = siot_mesh_at_root_add_updates_for_device_when_route_is_added( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
 			hop_data_added = true;
 		}
@@ -1865,7 +1865,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					else
 					{
 						// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
-						return siot_mesh_process_received_tosanta_or_forwardtosanta_packet( mem_h, *src_id, bus_id_at_src, first_hop, conn_quality, remaining_size > 2, request_id );
+						return siot_mesh_process_received_tosanta_or_forwardtosanta_packet( currt, mem_h, *src_id, bus_id_at_src, first_hop, conn_quality, remaining_size > 2, request_id );
 					}
 				}
 				else // packet is broken; subject for NAK

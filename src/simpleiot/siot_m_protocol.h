@@ -110,6 +110,7 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define SIOT_MESH_SUBJECT_FOR_ACK 2
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND 5
 #define MESH_RESEND_PERIOD_MS 500
+#define MESH_RECEIVING_HOPS_PERIOD_MS 500
 
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint8_t conn_quality, uint8_t error_cnt );
 uint8_t handler_siot_mesh_send_packet( uint8_t is_ctr, sa_time_val* currt, waiting_for* wf, uint16_t target_id, MEMORY_HANDLE mem_h, uint8_t resend_cnt, uint16_t* bus_id );
@@ -145,11 +146,11 @@ void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t repo
 
 void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t target_id );
 
-void siot_mesh_at_root_add_last_hop_in_data( uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
-uint8_t siot_mesh_at_root_find_best_route( uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
-uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id );
+void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
+void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
+uint8_t siot_mesh_at_root_find_best_route( const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
+//uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id );
 uint8_t siot_mesh_at_root_add_updates_for_device_when_route_is_added( uint16_t id_target, uint16_t bus_to_send_from_target, uint16_t id_prev, uint16_t bust_to_send_from_prev, uint16_t id_next /*more data may be required*/ );
-void siot_mesh_at_root_add_last_hop_out_data( uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
 uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h, uint16_t* recipient );
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id );
 uint8_t siot_mesh_at_root_update_failed( uint16_t device_id );
