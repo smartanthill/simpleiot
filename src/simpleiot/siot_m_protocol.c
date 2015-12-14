@@ -3143,8 +3143,8 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						siot_mesh_at_root_add_send_from_santa_task( pretask.mem_h, currt, &(wf->wait_time), pretask.bus_id, pretask.next_hop );
 						pretask.mem_h = MEMORY_HANDLE_INVALID;
 					}
-					siot_mesh_from_santa_pretask_holder_release( &pretask_holder );
 				}
+				siot_mesh_from_santa_pretask_holder_release( &pretask_holder );
 
 				break;
 			}
