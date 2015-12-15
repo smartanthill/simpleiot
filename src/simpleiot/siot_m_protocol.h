@@ -150,7 +150,7 @@ void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t 
 void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
 uint8_t siot_mesh_at_root_find_best_route( const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
 //uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id );
-uint8_t siot_mesh_at_root_add_updates_for_device_when_route_is_added( uint16_t id_target, uint16_t bus_to_send_from_target, uint16_t id_prev, uint16_t bust_to_send_from_prev, uint16_t id_next /*more data may be required*/ );
+void siot_mesh_at_root_add_updates_for_device_when_route_is_added( uint16_t id_target, uint16_t bus_to_send_from_target, uint16_t id_prev, uint16_t bust_to_send_from_prev, uint16_t id_next /*more data may be required*/ );
 uint8_t siot_mesh_at_root_load_update_to_packet( MEMORY_HANDLE mem_h, uint16_t* recipient );
 uint8_t siot_mesh_at_root_update_done( uint16_t device_id );
 uint8_t siot_mesh_at_root_update_failed( uint16_t device_id );
