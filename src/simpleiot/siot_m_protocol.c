@@ -1133,7 +1133,7 @@ bool siot_mesh_clean_last_hop_data_storage_if_single_element( uint8_t slot_id )
 	return false;
 }
 
-void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers, uint16_t* request_id, bool release_slot )
+void siot_mesh_write_last_hop_data_as_opt_headers_and_release_slot( uint8_t slot_id, MEMORY_HANDLE mem_h, bool no_more_headers, uint16_t* request_id )
 {
 	ZEPTO_DEBUG_ASSERT( slot_id < 2 );
 	SIOT_MESH_LAST_HOP_DATA* last_hops = last_requests[slot_id].hop_list;
@@ -1154,12 +1154,10 @@ void siot_mesh_write_last_hop_data_as_opt_headers( uint8_t slot_id, MEMORY_HANDL
 	zepto_parser_encode_and_append_uint16( mem_h, header );
 	zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
 	zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
-	if ( release_slot )
-	{
+
 		last_requests[slot_id].hop_list_sz = 0;
 		last_requests[slot_id].ineffect = false;
 	}
-}
 
 #endif // USED_AS_MASTER
 
@@ -2246,7 +2244,7 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t mesh_val )
 			header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 1 << 4 ); // '1', packet type, 1 (at least one extra header: hop list item), rezerved (zeros)
 			zepto_parser_encode_and_append_uint16( mem_h, header );
 			ZEPTO_DEBUG_ASSERT( mesh_val < 2 );
-			siot_mesh_write_last_hop_data_as_opt_headers( mesh_val, mem_h, true, &request_id, true );
+			siot_mesh_write_last_hop_data_as_opt_headers_and_release_slot( mesh_val, mem_h, true, &request_id );
 		}
 		else
 		{
@@ -4057,7 +4055,6 @@ validate_tables();
 			break;
 		}
 	}
-	return SIOT_MESH_RET_OK;
 
 #else // USED_AS_RETRANSMITTER
 	// TODO: processing on a terminating device is much easier, reimplement!!!
