@@ -4043,6 +4043,7 @@ validate_tables();
 				}
 				else
 				{
+					zepto_parser_free_memory( mem_h ); // as we have modified it above
 					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
 				}
 			}
@@ -4128,6 +4129,7 @@ validate_tables();
 		return SIOT_MESH_RET_PASS_TO_SEND;
 #endif
 
+	zepto_parser_free_memory( mem_h );
 	if ( siot_mesh_last_hop_data_storage_is_time_to_send( 0, currt, &(wf->wait_time) ) )
 	{
 		siot_mesh_form_packet_to_santa( mem_h, 0 );
