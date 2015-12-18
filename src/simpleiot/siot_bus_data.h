@@ -24,7 +24,19 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #define SIOT_COMMUNICATION_BUS_TYPE_UART
 
+// Upper levels need some way to iterate over buses (more precisely, over something uniquely specifying a direction to send a packet, such as bus_id, or, potentially, even bus_id + intra_bus_id, etc )
+// Here we provide a sample (and quite naive and simple) approach just to be able to go forward with implementation of upper levels 
+// and with full understanding that selected approach can be revised more or less substantially assuming that the above-said goal is somehow reached
+// (in other words: if you do not like it, just come with proposals).
+// TODO: actual interface and its implementation
+
 uint8_t hal_get_bus_count(); // bus IDs are then expected in the range 0..(ret_val-1)
+
+#if 0 // another potential approach
+uint16_t hal_get_first_bus_id();
+uint16_t hal_get_first_bus_id( uint16_t prev_bus_id);
+#endif // 0
+
 uint8_t hal_get_bus_type( uint8_t bus_id );
 // requests for other information, such as flags, etc, will be added in a similar manner as necessary
 

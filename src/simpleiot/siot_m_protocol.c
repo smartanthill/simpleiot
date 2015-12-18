@@ -1155,9 +1155,9 @@ void siot_mesh_write_last_hop_data_as_opt_headers_and_release_slot( uint8_t slot
 	zepto_parser_encode_and_append_uint16( mem_h, last_hops[ i ].last_hop_bus_id );
 	zepto_parser_encode_and_append_uint8( mem_h, last_hops[ i ].conn_quality );
 
-		last_requests[slot_id].hop_list_sz = 0;
-		last_requests[slot_id].ineffect = false;
-	}
+	last_requests[slot_id].hop_list_sz = 0;
+	last_requests[slot_id].ineffect = false;
+}
 
 #endif // USED_AS_MASTER
 
@@ -2225,7 +2225,7 @@ void siot_mesh_rebuild_unicast_packet_for_forwarding( MEMORY_HANDLE mem_h, bool 
 }
 #endif // USED_AS_RETRANSMITTER
 
-void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t mesh_val )
+void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t mesh_val, uint16_t bus_id )
 {
 	// Santa Packet structure: | SAMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
@@ -2266,7 +2266,7 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t mesh_val )
 	zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
 
 	// BUS-ID-AT-SOURCE
-	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // TODO: actual value must be used
+	zepto_parser_encode_and_append_uint16( mem_h, bus_id );
 
 	// REQUEST-ID
 	zepto_parser_encode_and_append_uint16( mem_h, request_id );
@@ -2394,7 +2394,7 @@ void siot_mesh_form_unicast_packet( MEMORY_HANDLE mem_h, uint16_t link_id, uint1
 	*packet_checksum = checksum;
 }
 
-void siot_mesh_unicast_packet_to_root_to_tosanta( MEMORY_HANDLE mem_h )
+void siot_mesh_unicast_packet_to_root_to_tosanta( MEMORY_HANDLE mem_h, uint16_t bus_id )
 {
 	parser_obj po, po1;
 	zepto_parser_init( &po, mem_h );
@@ -2457,7 +2457,7 @@ if( ( header & 1 ) )
 	zepto_convert_part_of_request_to_response( mem_h, &po, &po1 );
 	zepto_response_to_request( mem_h );
 
-	siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+	siot_mesh_form_packet_to_santa( mem_h, 0xFF, bus_id );
 }
 
 #ifdef USED_AS_RETRANSMITTER
@@ -3441,10 +3441,12 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( ret_code != SIOT_MESH_RET_OK )
 				{
 					ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
-//					ZEPTO_DEBUG_ASSERT( 0 == "Receiving To-Santa by a retransmitter that has no route to root is not implemented. Do it ASAP!" );
 					// TODO: check whether the approach below is reasonable
 					//       other possible decisions: do nothing, think about adding payload of the initial packet, etc
-					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+					uint16_t bus_cnt = hal_get_bus_count();
+					*bus_id = 0;
+					siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
+					// TODO: iterate over buses
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
 				SIOT_MESH_LINK link;
@@ -3656,8 +3658,10 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				else
 				{
 					zepto_parser_free_memory( mem_h );
-					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
-					// TODO: anything else?
+					// TODO: iterate over buses
+					uint16_t bus_cnt = hal_get_bus_count();
+					*bus_id = 0;
+					siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
 
@@ -3813,7 +3817,10 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						}
 						else
 						{
-							siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF );
+							// TODO: iterate over buses
+							uint16_t bus_cnt = hal_get_bus_count();
+							*bus_id = 0;
+							siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
 						}
 					}
 					return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
@@ -3863,7 +3870,10 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						{
 							if ( is_from_root ) // we would send an ACK in the opposite direction (that is, to root); we lost that direction; thus, we have to send To-Santa
 							{
-								siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF );
+								// TODO: iterate over buses
+								uint16_t bus_cnt = hal_get_bus_count();
+								*bus_id = 0;
+								siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
 							}
 							else // we would send an ACK in the opposite direction (that is, from root); we lost that direction; thus, we have to send routing error
 							{
@@ -3879,7 +3889,10 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 								}
 								else
 								{
-									siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF );
+									// TODO: iterate over buses
+									uint16_t bus_cnt = hal_get_bus_count();
+									*bus_id = 0;
+									siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
 								}
 							}
 						}
@@ -3892,16 +3905,22 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				}
 				else
 				{
+					SIOT_MESH_LINK link;
+					uint8_t ret_code1 = siot_mesh_get_link_to_root( &link );
 					// depending on the direction of the packet we send either To-Santa or Routing-Error packet
 					zepto_parser_free_memory( mem_h );
-					if ( is_from_root )
+					if ( is_from_root && ret_code1 == SIOT_MESH_RET_OK )
 					{
+						*bus_id = link.BUS_ID;
 						uint16_t packet_checksum;
 						siot_mesh_form_routing_error_packet( mem_h, SIOT_MESH_NEXT_HOP_UNDEFINED, target_id, packet_reported_checksum, &packet_checksum );
 					}
 					else
 					{
-						siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+						// TODO: iterate over buses
+						uint16_t bus_cnt = hal_get_bus_count();
+						*bus_id = 0;
+						siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
 					}
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
@@ -3985,18 +4004,6 @@ validate_tables();
 		case SIOT_MESH_RET_RESEND_TASK_INTERM:
 		{
 			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_INTERM, target: %d  ###########\n", info.target_id );
-/*			zepto_response_to_request( mem_h );
-			uint16_t checksum;
-			bool route_known = siot_mesh_target_to_link_id( info.target_id, &link_id ) == SIOT_MESH_RET_OK;
-			if ( route_known )
-			{
-				siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, info.target_id, true, &checksum );
-			}
-			else
-			{
-				siot_mesh_remove_resend_task_by_device_id( info.target_id, currt, &(wf->wait_time) );
-				siot_mesh_form_packet_to_santa( mem_h, 0xFF );
-			}*/
 			*bus_id = info.bus_id;
 			ZEPTO_DEBUG_ASSERT( *bus_id != 0xFFFF );
 			return SIOT_MESH_RET_PASS_TO_SEND;
@@ -4005,13 +4012,11 @@ validate_tables();
 		case SIOT_MESH_RET_RESEND_TASK_FINAL:
 		{
 			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_FINAL, target: %d  ###########\n", info.target_id );
-			// TODO: if the direction is toward the root, we send To-Santa; otherwise we send an error packet
-//			zepto_parser_free_memory( mem_h );
-//			siot_mesh_form_packet_to_santa( mem_h, 0xFF );
+			ZEPTO_DEBUG_ASSERT( info.target_id = 0 ); // own packets are toward the root, right?
 			zepto_response_to_request( mem_h );
-			siot_mesh_unicast_packet_to_root_to_tosanta( mem_h );
-			// TODO: iterate over buses!!!
 			*bus_id = 0;
+			siot_mesh_unicast_packet_to_root_to_tosanta( mem_h, *bus_id );
+			// TODO: iterate over buses!!!
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
@@ -4038,9 +4043,9 @@ validate_tables();
 			zepto_parser_free_memory( mem_h );
 			if ( info.target_id == 0 )
 			{
-				siot_mesh_form_packet_to_santa( mem_h, 0xFF );
 				// TODO: iterate over all buses
 				*bus_id = 0;
+				siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
 			}
 			else
 			{
@@ -4058,9 +4063,9 @@ validate_tables();
 				else
 				{
 					zepto_parser_free_memory( mem_h ); // as we have modified it above
-					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
 					// TODO: iterate over all buses
 					*bus_id = 0;
+					siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
 				}
 			}
 			ZEPTO_DEBUG_ASSERT( *bus_id != 0xFFFF );
@@ -4126,10 +4131,11 @@ validate_tables();
 					}*/
 //					siot_mesh_form_packet_to_santa( mem_h, 0xFF );
 					zepto_response_to_request( mem_h );
-					siot_mesh_unicast_packet_to_root_to_tosanta( mem_h );
-					pending_resends[oldest_index].resend_cnt = 0;
-					// TODO: iterate over buses!!!
+					// TODO: iterate over buses if more than 1 is expected!!!
+					ZEPTO_DEBUG_ASSERT( hal_get_bus_count() );
 					*bus_id = 0;
+					siot_mesh_unicast_packet_to_root_to_tosanta( mem_h, *bus_id );
+					pending_resends[oldest_index].resend_cnt = 0;
 					ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_timer(): packet is abuot to be sent as \'to santa\' (resent cnt = %d, shecksum = %04x)  ###########\n", pending_resends[oldest_index].resend_cnt, pending_resends[oldest_index].checksum );
 				}
 				if ( pending_resends[oldest_index].resend_cnt == 0 )
@@ -4154,18 +4160,18 @@ validate_tables();
 	zepto_parser_free_memory( mem_h );
 	if ( siot_mesh_last_hop_data_storage_is_time_to_send( 0, currt, &(wf->wait_time) ) )
 	{
-		siot_mesh_form_packet_to_santa( mem_h, 0 );
 		// TODO: iterate over buses!!!
 		*bus_id = 0;
+		siot_mesh_form_packet_to_santa( mem_h, 0, *bus_id );
 		ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_timer(): sending collected by \"from-santa\", slot: 0  ###########\n" );
 		return SIOT_MESH_RET_PASS_TO_SEND;
 	}
 
 	if ( siot_mesh_last_hop_data_storage_is_time_to_send( 1, currt, &(wf->wait_time) ) )
 	{
-		siot_mesh_form_packet_to_santa( mem_h, 1 );
 		// TODO: iterate over buses!!!
 		*bus_id = 0;
+		siot_mesh_form_packet_to_santa( mem_h, 1, *bus_id );
 		ZEPTO_DEBUG_PRINTF_1( "         ############  handler_siot_mesh_timer(): sending collected by \"from-santa\", slot: 1  ###########\n" );
 		return SIOT_MESH_RET_PASS_TO_SEND;
 	}
@@ -4203,7 +4209,7 @@ validate_tables();
 			siot_mesh_add_resend_task( mem_h, currt, checksum, target_id, link.BUS_ID, link.NEXT_HOP, &(wf->wait_time) );
 #else // USED_AS_RETRANSMITTER
 			uint16_t checksum;
-			siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, target_id, true, &checksum );
+			siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, target_id, true, &checksum ); 
 			ZEPTO_DEBUG_ASSERT( *bus_id != 0xFFFF );
 			ZEPTO_DEBUG_PRINTF_3( "         ############  handler_siot_mesh_send_packet(): yet known route, requesting ACK (resend count: %d, shecksum = %04x)  ###########\n", resend_cnt, checksum );
 			SIOT_MESH_LINK link;
@@ -4256,9 +4262,9 @@ validate_tables();
 		ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_ERROR_NOT_FOUND );
 		ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_send_packet(): UNKNOWN route (resend count: %d)  ###########\n", resend_cnt );
 
-		siot_mesh_form_packet_to_santa( mem_h, mesh_val );
 		// TODO: iterate over all buses
 		*bus_id = 0;
+		siot_mesh_form_packet_to_santa( mem_h, mesh_val, *bus_id );
 
 		return SIOT_MESH_RET_PASS_TO_SEND;
 	}

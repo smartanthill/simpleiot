@@ -170,6 +170,8 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 
 #else // USED_AS_MASTER
 
+#include <simpleiot/siot_bus_data.h>
+
 #define SIOT_MESH_SUBJECT_FOR_ACK 2
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND 5
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND_UNICAST_IN_TRANSIT 4
