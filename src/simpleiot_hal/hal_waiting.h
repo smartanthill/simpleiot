@@ -43,7 +43,7 @@ typedef struct _waiting_for
 extern "C" {
 #endif
 
-uint8_t hal_wait_for( waiting_for* wf );
+uint8_t hal_wait_for( waiting_for* wf, uint16_t* bus_id );
 void mcu_sleep( uint16_t sec, uint8_t transmitter_state_on_exit );
 void just_sleep( sa_time_val* timeval );
 void keep_transmitter_on( bool keep_on );

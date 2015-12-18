@@ -44,9 +44,9 @@ void communication_terminate();
 uint8_t hal_send_packet( MEMORY_HANDLE mem_h, uint8_t bus_id, uint8_t intrabus_id );
 uint8_t hal_get_busid_of_last_packet(); // TODO: this approach seems not to be too good interface solution
 #else
-uint8_t send_message( MEMORY_HANDLE mem_h );
+uint8_t send_message( MEMORY_HANDLE mem_h, uint16_t bus_id );
 #endif
-uint8_t hal_get_packet_bytes( MEMORY_HANDLE mem_h );
+uint8_t hal_get_packet_bytes( MEMORY_HANDLE mem_h, uint16_t bus_id );
 void keep_transmitter_on( bool keep_on );
 
 #ifdef __cplusplus

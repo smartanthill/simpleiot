@@ -112,7 +112,7 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define MESH_RESEND_PERIOD_MS 500
 #define MESH_RECEIVING_HOPS_PERIOD_MS 500
 
-uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint8_t conn_quality, uint8_t error_cnt );
+uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint16_t* bus_id, uint8_t conn_quality, uint8_t error_cnt );
 uint8_t handler_siot_mesh_send_packet( uint8_t is_ctr, sa_time_val* currt, waiting_for* wf, uint16_t target_id, MEMORY_HANDLE mem_h, uint8_t resend_cnt, uint16_t* bus_id );
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* device_id, uint16_t* bus_id );
 void handler_siot_mesh_process_route_update_response(  uint16_t source_dev_id, MEMORY_HANDLE mem_h );
