@@ -17,6 +17,7 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_m_protocol.h"
 
+#if 0
 // TODO: code below represents h/w-dependent information;
 //       it is placed here TEMPORARILY for the sake of progress of remaining development
 //       and MUST be REVISED and REWORKED ASAP!!!
@@ -44,7 +45,7 @@ BUS_LIST_ITEM bus_list[ BUS_LIST_ITEM_COUNT ] = {0, 0};
 
 #define BUS_TYPE_UNDEFINED 0XFF
 
-uint8_t get_bus_type_by_bus_id( uint16_t bus_id )
+uint8_t hal_get_bus_type_by_bus_id( uint16_t bus_id )
 {
 	uint8_t idx;
 	for ( idx=0; idx<BUS_LIST_ITEM_COUNT; idx++ )
@@ -54,6 +55,7 @@ uint8_t get_bus_type_by_bus_id( uint16_t bus_id )
 }
 
 // [end of TODO comment]
+#endif // 0
 
 
 typedef struct _SIOT_MESH_LAST_HOP_DATA
@@ -489,10 +491,98 @@ uint16_t siot_mesh_calculate_route_table_checksum()
 #define SIOT_MESH_RET_RESEND_TASK_FROM_SANTA 10
 #define SIOT_MESH_RET_RESEND_TASK_UNICAST 11
 #define SIOT_MESH_RET_RESEND_TASK_UNICAST_POSTFINAL 12
+#define SIOT_MESH_RET_RESEND_TASK_TO_SANTA 13
 
 #define MESH_PENDING_RESEND_FROM_SANTA 0
 #define MESH_PENDING_RESEND_TYPE_SELF_REPEATED 1
 #define MESH_PENDING_RESEND_TYPE_TRANSIT_UNICAST 2
+#define MESH_PENDING_RESEND_TYPE_TO_SANTA_NEXT_BUS_ID 3
+#define MESH_PENDING_RESEND_TO_SANTA 4
+
+void siot_mesh_rebuild_to_santa_for_new_bus_id( MEMORY_HANDLE mem_h, uint16_t bus_id )
+{
+	// Hmp-To-Santa-Data-Or-Error-Packet: | HMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS | SOURCE-ID | BUS-ID-AT-SOURCE | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+	// as this is an internal call we assume that the packet is integral and start writing output immediately
+
+	parser_obj po, po1;
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	zepto_parser_free_response( mem_h );
+	
+	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
+
+	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, presence of OPTIONAL-EXTRA-HEADERS
+	uint16_t header = zepto_parse_encoded_uint16( &po );
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+	uint8_t extra_headers_present = ( header >> 4 ) & 0x1;
+
+	// now we're done with the header; proceeding to optional headers...
+	parser_obj po_eh_start;
+	zepto_parser_init_by_parser( &po_eh_start, &po );
+	while ( extra_headers_present )
+	{
+		header = zepto_parse_encoded_uint16( &po );
+		extra_headers_present = header & 0x1;
+		uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
+		switch ( generic_flags )
+		{
+			case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
+			{
+				zepto_parse_encoded_uint16( &po ); // last_hop_bus_id; just skip
+				zepto_parse_encoded_uint8( &po ); // connection quality; just skip
+				break;
+			}
+			case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
+			case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
+			case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
+			{
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+				break;
+			}
+			default:
+			{
+				ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected type of optional header\n" );
+				break;
+			}
+		}
+	}
+	zepto_append_part_of_request_to_response( mem_h, &po_eh_start, &po );
+	
+	// SOURCE-ID
+	zepto_parse_encoded_uint16( &po ); // just skip
+	zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
+
+	// BUS-ID-AT-SOURCE
+	zepto_parse_encoded_uint16( &po ); // just skip
+	zepto_parser_encode_and_append_uint16( mem_h, bus_id );
+
+	// REQUEST-ID
+	uint16_t request_id = zepto_parse_encoded_uint16( &po );
+	zepto_parser_encode_and_append_uint16( mem_h, request_id );
+
+	// OPTIONAL-PAYLOAD-SIZE
+
+	// HEADER-CHECKSUM
+	zepto_parse_encoded_uint8( &po ); // checksum  1st byte; just skip
+	zepto_parse_encoded_uint8( &po ); // checksum  2nd byte; just skip
+	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
+	uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, 0, rsp_sz, 0 );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+
+	// PAYLOAD
+	zepto_parser_init( &po, mem_h );
+	zepto_parser_init( &po1, mem_h );
+	zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
+	zepto_append_part_of_request_to_response( mem_h, &po, &po1 );
+
+	// FULL-CHECKSUM
+	checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+	
+	zepto_response_to_request( mem_h );
+}
 
 void siot_mesh_add_resend_task( MEMORY_HANDLE packet/*, uint8_t type*/, const sa_time_val* currt, uint16_t checksum, uint16_t target_id, uint16_t bus_id, uint16_t next_hop, sa_time_val* time_to_next_event )
 {
@@ -560,6 +650,34 @@ void siot_mesh_at_root_add_send_from_santa_task( MEMORY_HANDLE packet, const sa_
 	resend.bus_id = bus_id;
 	resend.target_id = SIOT_MESH_TARGET_UNDEFINED;
 	resend.next_hop = next_hop;
+	resend.resend_cnt = 1;
+	sa_hal_time_val_copy_from( &(resend.next_resend_time), currt );
+	zepto_memman_append_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+	SA_TIME_SET_ZERO_TIME( *time_to_next_event );
+}
+
+void siot_mesh_at_root_add_send_to_santa_task( MEMORY_HANDLE packet, const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t bus_id )
+{
+	MESH_PENDING_RESENDS resend;
+
+	// 1. should we add?
+	uint16_t bus_cnt = hal_get_bus_count();
+	ZEPTO_DEBUG_ASSERT( bus_cnt != 0 );
+	if ( bus_id >= bus_cnt - 1 )
+		return;
+
+	// 2. add resend task
+	resend.type = MESH_PENDING_RESEND_TO_SANTA;
+	resend.packet_h = acquire_memory_handle();
+	if ( resend.packet_h == MEMORY_HANDLE_INVALID )
+	{
+		ZEPTO_DEBUG_ASSERT( 0 == "memory deficiency (getting invalid handle) is not considered yet" ); // TODO: consider and implement
+	}
+	zepto_copy_response_to_response_of_another_handle( packet, resend.packet_h );
+	zepto_response_to_request( resend.packet_h );
+	resend.bus_id = bus_id;
+	resend.target_id = 0;
+	resend.next_hop = SIOT_MESH_NEXT_HOP_UNDEFINED;
 	resend.resend_cnt = 1;
 	sa_hal_time_val_copy_from( &(resend.next_resend_time), currt );
 	zepto_memman_append_locally_generated_data( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
@@ -704,10 +822,6 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* curr
 		}
 		case MESH_PENDING_RESEND_FROM_SANTA:
 		{
-/*if ( resend.resend_cnt != 1 )
-{
-	resend.resend_cnt = resend.resend_cnt;
-}*/
 			ZEPTO_DEBUG_ASSERT( resend.resend_cnt == 1 );
 			zepto_parser_free_memory( packet );
 			zepto_copy_response_to_response_of_another_handle( resend.packet_h, packet );
@@ -732,6 +846,46 @@ uint8_t siot_mesh_get_resend_task( MEMORY_HANDLE packet, const sa_time_val* curr
 			}
 
 			return SIOT_MESH_RET_RESEND_TASK_FROM_SANTA;
+		}
+		case MESH_PENDING_RESEND_TO_SANTA:
+		{
+			zepto_parser_free_memory( packet );
+			uint16_t bus_cnt = hal_get_bus_count();
+			(resend.bus_id)++;
+			ZEPTO_DEBUG_ASSERT( resend.bus_id < bus_cnt );
+			siot_mesh_rebuild_to_santa_for_new_bus_id( resend.packet_h, resend.bus_id );
+			zepto_copy_request_to_response_of_another_handle( resend.packet_h, packet );
+			info->bus_id = resend.bus_id;
+
+			if ( resend.bus_id == bus_cnt - 1 ) // the last; remove the task
+			{
+				release_memory_handle( resend.packet_h );
+				for ( offset=it_oldest * sizeof( MESH_PENDING_RESENDS ); ; offset += sizeof( MESH_PENDING_RESENDS ) )
+				{
+					if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset + sizeof( MESH_PENDING_RESENDS ), sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+						break;
+					zepto_memman_write_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) );
+				}
+				zepto_memman_trim_locally_generated_data_at_right( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, sizeof( MESH_PENDING_RESENDS ) );
+
+				// now we calculate remaining time for only actually remaining tasks
+				ZEPTO_DEBUG_PRINTF_1( "\nRequest tasks @siot_mesh_get_resend_task():\n" );
+				for ( offset=0; ; offset+=sizeof( MESH_PENDING_RESENDS ) )
+				{
+					if ( ! zepto_memman_read_locally_generated_data_by_offset( MEMORY_HANDLE_MESH_RESEND_TASK_HOLDER, offset, sizeof( MESH_PENDING_RESENDS ), (uint8_t*)(&resend) ) )
+						break;
+					bool ret = sa_hal_time_val_get_remaining_time( currt, &(resend.next_resend_time), time_to_next_event );
+			//		ZEPTO_DEBUG_ASSERT( ret ); // non-zero time indeed remains
+					ZEPTO_DEBUG_PRINTF_6( "%04x%04x: (TO-SANTA-WITH-NEW-BUSID) target: %d, packet_h:%d, bus_id: %d\n", resend.next_resend_time.high_t, resend.next_resend_time.low_t, resend.target_id, resend.packet_h, resend.bus_id );
+				}
+			}
+			else // not yet done; set time to next event to 0
+			{
+				// no need to recalculate; go back immediately
+				SA_TIME_SET_ZERO_TIME( *time_to_next_event );
+			}
+
+			return SIOT_MESH_RET_RESEND_TASK_TO_SANTA;
 		}
 		case MESH_PENDING_RESEND_TYPE_TRANSIT_UNICAST:
 		{
@@ -2230,7 +2384,7 @@ void siot_mesh_form_packet_to_santa( MEMORY_HANDLE mem_h, uint8_t mesh_val, uint
 	// Santa Packet structure: | SAMP-TO-SANTA-DATA-OR-ERROR-PACKET-NO-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | REQUEST-ID | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
 	// TODO: here and then use bit-field processing instead
 
-	ZEPTO_DEBUG_PRINTF_2( "Forming packet To-Santa, mesh_val = %d\n", mesh_val );
+	ZEPTO_DEBUG_PRINTF_3( "Forming packet To-Santa, mesh_val = %d, bus_id = %d\n", mesh_val, bus_id );
 
 	parser_obj po, po1;
 	uint16_t header;
@@ -3030,105 +3184,100 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 					while ( bus_type != 0 ) // 0 is a terminator
 					{
 						bus_type --;
-						found = false;
-						for ( idx=0; idx<BUS_LIST_ITEM_COUNT; idx++ )
-							if ( bus_list[ idx ].bus_type == bus_type )
-							{
-								found = true;
-								break;
-							}
-						if ( !found ) continue; // we do not have a bus of such type
 
 						// now we have to prepare a packet for each bus of this type which is not yet used
-						for ( idx=0; idx<BUS_LIST_ITEM_COUNT; idx++ )
+						uint16_t bus_id_of_type = BUS_ID_UNDEFINED;
+						do
 						{
-							if ( bus_list[ idx ].bus_type == bus_type )
+							bus_id_of_type = hal_get_next_bus_of_type( bus_type, bus_id_of_type );
+							if ( bus_id_of_type == BUS_ID_UNDEFINED ) break; // we do not have a bus of such type (remaining)
+
+							// has it already been used?
+							found = false;
+							for ( idx=0; idx<siot_mesh_from_santa_pretask_holder_get_count( &pretask_holder ); idx++ )
 							{
-								found = false;
-								for ( idx=0; idx<siot_mesh_from_santa_pretask_holder_get_count( &pretask_holder ); idx++ )
+								siot_mesh_from_santa_pretask_holder_get_pretask( &pretask_holder, idx, &pretask );
+								if ( pretask.bus_id == bus_id_of_type )
 								{
-									siot_mesh_from_santa_pretask_holder_get_pretask( &pretask_holder, idx, &pretask );
-									if ( pretask.bus_id == bus_list[ idx ].bus_id )
-									{
-										found = true;
-										break;
-									}
+									found = true;
+									break;
 								}
-								if ( found ) continue;
-
-								// this bus is of a right type and was not used yet
-								MEMORY_HANDLE output_h = acquire_memory_handle();
-
-								// THIS IS ONE OF RETRANSMITTERS WE HAVE A ROUTE TO; PREPARE A PACKET
-
-								// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL 
-								uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( extra_headers_present << 4) | ( TTL << 5 ); // '1', packet type, 0 (no extra headers), TTL
-								zepto_parser_encode_and_append_uint16( output_h, header );
-
-								// OPTIONAL-EXTRA-HEADERS (copying)
-								if ( extra_headers_present )
-								{
-									zepto_parser_init_by_parser( &po_block_start, &po_headers_start );
-									zepto_parser_init_by_parser( &po_block_end, &po_headers_end );
-									zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
-								}
-
-								// LAST-HOP
-								zepto_parser_encode_and_append_uint16( output_h, DEVICE_SELF_ID );
-
-								// LAST-HOP-BUS-ID
-								zepto_parser_encode_and_append_uint16( output_h, bus_list[ idx ].bus_id );
-
-								// REQUEST-ID (copying)
-								zepto_parser_encode_and_append_uint16( output_h, request_id );
-
-								// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
-
-								// MULTIPLE-RETRANSMITTING-ADDRESSES (none at this point)
-								zepto_parser_encode_and_append_uint16( output_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
-
-								// BROADCAST-BUS-TYPE-LIST (copying)
-								zepto_parser_init_by_parser( &po_block_start, &po_bustype_start );
-								zepto_parser_init_by_parser( &po_block_end, &po_bustype_end );
-								zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
-
-								//  Multiple-Target-Addresses (copying)
-								zepto_parser_init_by_parser( &po_block_start, &po_target_start );
-								zepto_parser_init_by_parser( &po_block_end, &po_target_end );
-								zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
-
-								// OPTIONAL-TARGET-REPLY-DELAY
-								if ( explicit_time_scheduling )
-									zepto_parser_encode_and_append_uint16( output_h, optional_target_reply_delay );
-
-								// OPTIONAL-PAYLOAD-SIZE
-								if ( more_packets_follow )
-									zepto_parser_encode_and_append_uint16( output_h, optional_payload_size );
-
-								// HEADER-CHECKSUM
-								uint16_t rsp_sz = memory_object_get_response_size( output_h );
-								uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, 0, rsp_sz, 0 );
-								zepto_write_uint8( output_h, (uint8_t)checksum );
-								zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
-
-								// PAYLOAD (copying)
-								zepto_parser_init_by_parser( &po_block_start, &po_payload_start );
-								zepto_parser_init_by_parser( &po_block_end, &po_payload_end );
-								zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
-
-								// FULL-CHECKSUM
-								checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
-								zepto_write_uint8( output_h, (uint8_t)checksum );
-								zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
-
-								// now we have a ready packet to be sent via some bus; add it to the list of pre-tasks
-
-								pretask.mem_h = output_h;
-								pretask.bus_id = bus_list[ idx ].bus_id;
-								pretask.next_hop = SIOT_MESH_NEXT_HOP_UNDEFINED;
-								siot_mesh_from_santa_pretask_holder_add_pretask( &pretask_holder, &pretask );
 							}
+							if ( found ) continue;
+
+							// this bus is of a right type and was not used yet
+							MEMORY_HANDLE output_h = acquire_memory_handle();
+
+							// THIS IS ONE OF RETRANSMITTERS WE HAVE A ROUTE TO; PREPARE A PACKET
+
+							// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL 
+							uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( extra_headers_present << 4) | ( TTL << 5 ); // '1', packet type, 0 (no extra headers), TTL
+							zepto_parser_encode_and_append_uint16( output_h, header );
+
+							// OPTIONAL-EXTRA-HEADERS (copying)
+							if ( extra_headers_present )
+							{
+								zepto_parser_init_by_parser( &po_block_start, &po_headers_start );
+								zepto_parser_init_by_parser( &po_block_end, &po_headers_end );
+								zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+							}
+
+							// LAST-HOP
+							zepto_parser_encode_and_append_uint16( output_h, DEVICE_SELF_ID );
+
+							// LAST-HOP-BUS-ID
+							zepto_parser_encode_and_append_uint16( output_h, bus_id_of_type );
+
+							// REQUEST-ID (copying)
+							zepto_parser_encode_and_append_uint16( output_h, request_id );
+
+							// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
+
+							// MULTIPLE-RETRANSMITTING-ADDRESSES (none at this point)
+							zepto_parser_encode_and_append_uint16( output_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
+
+							// BROADCAST-BUS-TYPE-LIST (copying)
+							zepto_parser_init_by_parser( &po_block_start, &po_bustype_start );
+							zepto_parser_init_by_parser( &po_block_end, &po_bustype_end );
+							zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
+
+							//  Multiple-Target-Addresses (copying)
+							zepto_parser_init_by_parser( &po_block_start, &po_target_start );
+							zepto_parser_init_by_parser( &po_block_end, &po_target_end );
+							zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
+
+							// OPTIONAL-TARGET-REPLY-DELAY
+							if ( explicit_time_scheduling )
+								zepto_parser_encode_and_append_uint16( output_h, optional_target_reply_delay );
+
+							// OPTIONAL-PAYLOAD-SIZE
+							if ( more_packets_follow )
+								zepto_parser_encode_and_append_uint16( output_h, optional_payload_size );
+
+							// HEADER-CHECKSUM
+							uint16_t rsp_sz = memory_object_get_response_size( output_h );
+							uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, 0, rsp_sz, 0 );
+							zepto_write_uint8( output_h, (uint8_t)checksum );
+							zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
+
+							// PAYLOAD (copying)
+							zepto_parser_init_by_parser( &po_block_start, &po_payload_start );
+							zepto_parser_init_by_parser( &po_block_end, &po_payload_end );
+							zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
+
+							// FULL-CHECKSUM
+							checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
+							zepto_write_uint8( output_h, (uint8_t)checksum );
+							zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
+
+							// now we have a ready packet to be sent via some bus; add it to the list of pre-tasks
+
+							pretask.mem_h = output_h;
+							pretask.bus_id = bus_id_of_type;
+							pretask.next_hop = SIOT_MESH_NEXT_HOP_UNDEFINED;
+							siot_mesh_from_santa_pretask_holder_add_pretask( &pretask_holder, &pretask );
 						}
+						while ( 1 );
 
 						bus_type = zepto_parse_uint8( &po_bustype_start );
 					}
@@ -3781,6 +3930,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 		}
 		else
 		{
+			ZEPTO_DEBUG_PRINTF_6( "UNICAST, is_from_root = %d, target = %d, ack? = %d, last_hop = %d, next_hop = %d\n", is_from_root, target_id, ack_requested ? 1 : 0, last_hop, next_hop );
 #ifdef USED_AS_RETRANSMITTER
 			// questions to be asked: "is this packet for us?"; "is this packet through us?" If none is "YES", ignore the packet
 			if ( target_id == DEVICE_SELF_ID ) // for us
@@ -3820,7 +3970,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							// TODO: iterate over buses
 							uint16_t bus_cnt = hal_get_bus_count();
 							*bus_id = 0;
-							siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
+							siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF, *bus_id );
 						}
 					}
 					return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
@@ -3873,7 +4023,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 								// TODO: iterate over buses
 								uint16_t bus_cnt = hal_get_bus_count();
 								*bus_id = 0;
-								siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
+								siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF, *bus_id );
 							}
 							else // we would send an ACK in the opposite direction (that is, from root); we lost that direction; thus, we have to send routing error
 							{
@@ -3892,7 +4042,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 									// TODO: iterate over buses
 									uint16_t bus_cnt = hal_get_bus_count();
 									*bus_id = 0;
-									siot_mesh_form_packet_to_santa( mem_h, 0xFF, *bus_id );
+									siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF, *bus_id );
 								}
 							}
 						}
@@ -3903,7 +4053,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						return SIOT_MESH_RET_PASS_TO_SEND;
 					}
 				}
-				else
+				else // throug us, no route
 				{
 					SIOT_MESH_LINK link;
 					uint8_t ret_code1 = siot_mesh_get_link_to_root( &link );
@@ -4012,7 +4162,7 @@ validate_tables();
 		case SIOT_MESH_RET_RESEND_TASK_FINAL:
 		{
 			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_FINAL, target: %d  ###########\n", info.target_id );
-			ZEPTO_DEBUG_ASSERT( info.target_id = 0 ); // own packets are toward the root, right?
+			ZEPTO_DEBUG_ASSERT( info.target_id == 0 ); // own packets are toward the root, right?
 			zepto_response_to_request( mem_h );
 			*bus_id = 0;
 			siot_mesh_unicast_packet_to_root_to_tosanta( mem_h, *bus_id );
@@ -4027,6 +4177,13 @@ validate_tables();
 			ZEPTO_DEBUG_ASSERT( *bus_id != 0xFFFF );
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
+		}
+		case SIOT_MESH_RET_RESEND_TASK_TO_SANTA:
+		{
+			ZEPTO_DEBUG_PRINTF_2( "         ############  handler_siot_mesh_timer(): SIOT_MESH_RET_RESEND_TASK_TO_SANTA, bus: %d  ###########\n", info.bus_id );
+			*bus_id = info.bus_id;
+			ZEPTO_DEBUG_ASSERT( *bus_id != 0xFFFF );
+			return SIOT_MESH_RET_PASS_TO_SEND;
 		}
 		case SIOT_MESH_RET_RESEND_TASK_UNICAST:
 		{

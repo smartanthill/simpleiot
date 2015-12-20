@@ -37,7 +37,10 @@ uint16_t hal_get_first_bus_id();
 uint16_t hal_get_first_bus_id( uint16_t prev_bus_id);
 #endif // 0
 
-uint8_t hal_get_bus_type( uint8_t bus_id );
+#define BUS_TYPE_UNDEFINED 0XFF
+#define BUS_ID_UNDEFINED 0XFFFF
+uint8_t hal_get_bus_type_by_bus_id( uint16_t bus_id );
+uint16_t hal_get_next_bus_of_type(uint8_t bus_type, uint16_t prev_bus_id );
 // requests for other information, such as flags, etc, will be added in a similar manner as necessary
 
 
