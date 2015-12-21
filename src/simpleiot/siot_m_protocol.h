@@ -181,11 +181,7 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 
 void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
 void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply );
-#ifdef USED_AS_RETRANSMITTER
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt, uint16_t* bus_id, uint16_t* ack_bus_id );
-#else // USED_AS_RETRANSMITTER
-uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt, uint16_t* ack_bus_id );
-#endif // USED_AS_RETRANSMITTER
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val );
 uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint8_t mesh_val, uint8_t resend_cnt, uint16_t target_id, uint16_t* bus_id );
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id );
