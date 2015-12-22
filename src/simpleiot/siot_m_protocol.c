@@ -1063,7 +1063,7 @@ void validate_tables()
 }
 #else // SA_DEBUG
 #define print_tables()
-#defive validate_tables()
+#define validate_tables()
 #endif // SA_DEBUG
 
 uint16_t siot_mesh_calculate_route_table_checksum()
