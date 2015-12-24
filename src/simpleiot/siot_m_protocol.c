@@ -244,7 +244,7 @@ if ( !ordered )
 }
 #else // SA_DEBUG
 #define print_tables()
-#defive validate_tables()
+#define validate_tables()
 #endif // SA_DEBUG
 
 // TODO: for terminating device below processing is much easier!!! Reimplement!!!
