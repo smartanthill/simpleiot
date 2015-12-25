@@ -15,47 +15,11 @@ Copyright (C) 2015 OLogN Technologies AG
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 *******************************************************************************/
 
+#if (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_SIOTMP)
+#include "siot_m_protocol_dbg.inc"
+#else // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_SIOTMP) )
+
 #include "siot_m_protocol.h"
-
-#if 0
-// TODO: code below represents h/w-dependent information;
-//       it is placed here TEMPORARILY for the sake of progress of remaining development
-//       and MUST be REVISED and REWORKED ASAP!!!
-//       It appears that the list is constant during lifecycle (changes require recompilation);
-//       Therefore, current "quick" solution seems to be not too far from actual
-
-typedef struct _BUS_LIST_ITEM
-{
-	uint16_t bus_id;
-	uint8_t bus_type;
-} BUS_LIST_ITEM;
-
-#ifdef USED_AS_MASTER
-#define BUS_LIST_ITEM_COUNT 1
-BUS_LIST_ITEM bus_list[ BUS_LIST_ITEM_COUNT ] = {0, 0};
-#else
-#ifdef USED_AS_RETRANSMITTER
-#define BUS_LIST_ITEM_COUNT 2 // WHY? - see comment above - it's just for immediate testing purposes
-BUS_LIST_ITEM bus_list[ BUS_LIST_ITEM_COUNT ] = {{0, 0}, {1,1}};
-#else
-#define BUS_LIST_ITEM_COUNT 1
-BUS_LIST_ITEM bus_list[ BUS_LIST_ITEM_COUNT ] = {0, 0};
-#endif
-#endif
-
-#define BUS_TYPE_UNDEFINED 0XFF
-
-uint8_t hal_get_bus_type_by_bus_id( uint16_t bus_id )
-{
-	uint8_t idx;
-	for ( idx=0; idx<BUS_LIST_ITEM_COUNT; idx++ )
-		if ( bus_list[idx].bus_id == bus_id )
-			return bus_list[idx].bus_type;
-	return BUS_TYPE_UNDEFINED;
-}
-
-// [end of TODO comment]
-#endif // 0
 
 
 typedef struct _SIOT_MESH_LAST_HOP_DATA
@@ -1370,67 +1334,6 @@ void siot_mesh_form_ack_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_
 		// OPTIONAL-DELAY-LEFT
 	}
 }
-#if 0
-void siot_mesh_form_packet_from_santa( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t bus_id_used )
-{
-	// ASSUMPTIONS OF THE CURRENT IMPLEMENTATION
-	// 1. As seen from this function parameters in the current implementation we assume only one device at a time to be found
-	// 2. We also assume that the Root has a single bus
-
-	// Santa Packet structure: | SAMP-FROM-SANTA-DATA-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | REQUEST-ID | OPTIONAL-DELAY-UNIT | MULTIPLE-RETRANSMITTING-ADDRESSES | BROADCAST-BUS-TYPE-LIST | Target-Address | OPTIONAL-TARGET-REPLY-DELAY | OPTIONAL-PAYLOAD-SIZE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
-	// TODO: here and then use bit-field processing instead
-
-	parser_obj po, po1;
-
-	// SAMP-FROM-SANTA-DATA-PACKET-AND-TTL, OPTIONAL-EXTRA-HEADERS
-	uint16_t header = 1 | ( SIOT_MESH_FROM_SANTA_DATA_PACKET << 1 ) | ( SIOT_MESH_TTL_MAX << 5 ); // '1', packet type, 0 (no extra headers), TTL = SIOT_MESH_TTL_MAX
-	zepto_parser_encode_and_append_uint16( mem_h, header );
-
-	// LAST-HOP
-	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // ROOT
-
-	// LAST-HOP-BUS-ID
-	zepto_parser_encode_and_append_uint16( mem_h, bus_id_used );
-
-	// REQUEST-ID
-	static uint16_t rq_id = 0; // REQUEST-ID
-	rq_id++; // TODO: make true global; TODO: think whether this id is globally or per-device unique
-	zepto_parser_encode_and_append_uint16( mem_h, 0 ); // REQUEST-ID
-
-	// OPTIONAL-DELAY-UNIT is present only if EXPLICIT-TIME-SCHEDULING flag is present; currently we did not added it
-
-	// MULTIPLE-RETRANSMITTING-ADDRESSES 
-	uint16_t retransmitter_count = write_retransmitter_list_for_from_santa_packet( mem_h );
-
-	// BROADCAST-BUS-TYPE-LIST
-	write_bus_types_for_device_for_from_santa_packet( mem_h, target_id );
-
-	// Target-Address
-	header = 0 | ( target_id << 1 ); // NODE-ID, no more data
-	zepto_parser_encode_and_append_uint16( mem_h, header );
-
-	// OPTIONAL-TARGET-REPLY-DELAY
-
-	// OPTIONAL-PAYLOAD-SIZE
-
-	// HEADER-CHECKSUM
-	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
-	uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, 0, rsp_sz, 0 );
-	zepto_write_uint8( mem_h, (uint8_t)checksum );
-	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
-
-	// PAYLOAD
-	zepto_parser_init( &po, mem_h );
-	zepto_parser_init( &po1, mem_h );
-	zepto_parse_skip_block( &po1, zepto_parsing_remaining_bytes( &po ) );
-	zepto_append_part_of_request_to_response( mem_h, &po, &po1 );
-
-	// FULL-CHECKSUM
-	checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
-	zepto_write_uint8( mem_h, (uint8_t)checksum );
-	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
-}
-#endif // 0
 
 void siot_mesh_form_unicast_packet( MEMORY_HANDLE mem_h, uint16_t target_id, uint16_t next_hop_id, bool request_ack, uint16_t* packet_checksum )
 {
@@ -1739,12 +1642,14 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	// NOTE: there are a number of things that can be done by timer; on this development stage we assume that they happen somehow in the order as implemented
 	// TODO: actual implementation
 
+	uint8_t ret_code;
+
 	ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) == 0 );
 	*device_id = SIOT_MESH_TARGET_UNDEFINED;
 	*bus_id = SIOT_MESH_BUS_UNDEFINED;
 	uint16_t next_hop_id;
 
-	uint8_t ret_code = siot_mesh_at_root_get_resend_task( mem_h, currt, device_id, bus_id, &next_hop_id, &(wf->wait_time) );
+	ret_code = siot_mesh_at_root_get_resend_task( mem_h, currt, device_id, bus_id, &next_hop_id, &(wf->wait_time) );
 	switch (ret_code )
 	{
 		case SIOT_MESH_AT_ROOT_RET_RESEND_TASK_NONE_EXISTS:
@@ -1754,23 +1659,6 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 		{
 			ZEPTO_DEBUG_ASSERT( *device_id != SIOT_MESH_TARGET_UNDEFINED );
 			ZEPTO_DEBUG_ASSERT( *bus_id != SIOT_MESH_BUS_UNDEFINED );
-/*			uint16_t link_id;
-			zepto_response_to_request( mem_h );
-			uint16_t checksum;
-			bool route_known = siot_mesh_at_root_target_to_link_id( *device_id, &link_id ) == SIOT_MESH_RET_OK;
-			if ( route_known )
-			{
-				siot_mesh_form_unicast_packet( *device_id, mem_h, link_id, bus_id, true, &checksum );
-				return SIOT_MESH_RET_PASS_TO_SEND;
-			}
-			else
-			{
-				siot_mesh_at_root_remove_resend_task_by_device_id( *device_id, currt, &(wf->wait_time) );
-				// TODO: determine which physical links we will use; we will have to iterate over all of them
-				// NOTE: currently we assume that we have a single link with bus_id = 0
-				siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id );
-				return SIOT_MESH_RET_OK;
-			}*/
 			return SIOT_MESH_RET_PASS_TO_SEND;
 			break;
 		}
@@ -1792,36 +1680,27 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	}
 	zepto_parser_free_memory( mem_h );
 
-	static bool route_table_created = false;
-	static bool hop_data_added = false;
-	uint16_t target_id;
-//	if ( !hop_data_added )
 	{
+	uint16_t target_id;
 		uint16_t bus_id_at_target;
 		uint16_t id_from;
 		uint16_t bus_id_at_prev;
 		uint16_t id_next;
-		uint8_t ret_code = siot_mesh_at_root_find_best_route( currt, &(wf->wait_time), &target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
+	ret_code = siot_mesh_at_root_find_best_route( currt, &(wf->wait_time), &target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
 		if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
 		{
 			ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_find_best_route( target_id = %d, bus_id_at_target = %d, id_from = %d, id_next = %d ) returns OK; calling siot_mesh_at_root_add_updates_for_device_when_route_is_added()...\n",  target_id, bus_id_at_target, id_from, id_next );
-//			siot_mesh_at_root_remove_last_hop_data( target_id );
 			siot_mesh_at_root_add_updates_for_device_when_route_is_added( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
-			hop_data_added = true;
-		}
 	}
-//	if ( !route_table_created )
-	{
+
 		ret_code = handler_siot_mesh_prepare_route_update( mem_h, &target_id );
 		if ( ret_code == SIOT_MESH_RET_OK )
 		{
-			route_table_created = true;
 			*device_id = target_id;
 			return SIOT_MESH_RET_PASS_TO_CCP;
 		}
 		else
 			zepto_parser_free_response( mem_h );
-	}
 		
 	return SIOT_MESH_RET_OK;
 }
@@ -4596,3 +4475,6 @@ validate_tables();
 }
 
 #endif // USED_AS_MASTER
+
+
+#endif // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_SIOTMP) )
