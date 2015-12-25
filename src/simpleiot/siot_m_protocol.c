@@ -1680,7 +1680,25 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	}
 	zepto_parser_free_memory( mem_h );
 
+
+
+
+
+
+#ifdef SIOT_MESH_BTLE_MODE
+	ret_code = siot_mesh_at_root_form_allow_to_connect_packet( currt, &(wf->wait_time), mem_h, *device_id );
+	if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
 	{
+		return SIOT_MESH_RET_PASS_TO_SEND;
+	}
+#endif
+
+
+
+
+
+
+
 	uint16_t target_id;
 		uint16_t bus_id_at_target;
 		uint16_t id_from;
