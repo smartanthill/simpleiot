@@ -24,6 +24,8 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <hal_time_provider.h>
 #include "../simpleiot_hal/hal_waiting.h"
 
+//#define SIOT_MESH_BTLE_MODE
+
 extern uint16_t DEVICE_SELF_ID;
 
 #define SIOT_MESH_ANY_PACKET 0 // (used for other purposes) 	Samp-Unicast-Data-Packet
@@ -32,6 +34,10 @@ extern uint16_t DEVICE_SELF_ID;
 #define SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET 3 // 	Samp-Forward-To-Santa-Data-Or-Error-Packet
 #define SIOT_MESH_ROUTING_ERROR_PACKET 4 // 	Samp-Routing-Error-Packet
 #define SIOT_MESH_ACK_NACK_PACKET 5 // 	Samp-Ack-Nack-Packet
+#ifdef SIOT_MESH_BTLE_MODE
+#define SIOT_MESH_CONNECTION_REQUEST 6
+#define SIOT_MESH_CONNECTION_PERMISSION 7
+#endif
 
 #define SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS 0
 #define SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN 1
@@ -111,6 +117,8 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define SIOT_MESH_SUBJECT_FOR_MESH_RESEND 5
 #define MESH_RESEND_PERIOD_MS 500
 #define MESH_RECEIVING_HOPS_PERIOD_MS 500
+#define MESH_CHECK_ROUTS_TO_RETRANSMITTERS 10000 // 10s
+#define MESH_SEND_FROM_SANTA_TO_RETRANSMITTERS 60000 // 60s
 
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint16_t* bus_id, uint8_t conn_quality, uint8_t error_cnt );
 uint8_t handler_siot_mesh_send_packet( uint8_t is_ctr, sa_time_val* currt, waiting_for* wf, uint16_t target_id, MEMORY_HANDLE mem_h, uint8_t resend_cnt, uint16_t* bus_id );
@@ -135,7 +143,7 @@ extern "C" {
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA 10
 
 
-void siot_mesh_init_tables();  // TODO: this call reflects current development stage and may or may not survive in the future
+void siot_mesh_init_tables( sa_time_val* currt );  // TODO: this call reflects current development stage and may or may not survive in the future
 uint8_t write_bus_types_for_device_for_from_santa_packet( MEMORY_HANDLE mem_h, uint16_t device_id );
 uint16_t write_retransmitter_list_for_from_santa_packet( MEMORY_HANDLE mem_h );
 
@@ -144,10 +152,15 @@ uint8_t siot_mesh_get_link( uint16_t link_id, SIOT_MESH_LINK* link );
 void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id, uint16_t next_hop_id ); // generates route table updates
 void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id, uint16_t failed_target_id, uint8_t from_root );
 
-void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t target_id );
+void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t target_id );
+void siot_mesh_at_root_check_routes_to_retransmitters( const sa_time_val* currt, sa_time_val* time_to_next_event );
 
 void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
 void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
+#ifdef SIOT_MESH_BTLE_MODE
+void siot_mesh_at_root_add_connection_request_data( const sa_time_val* currt, uint16_t requester_id, uint16_t slave_id, uint16_t request_id, uint8_t urgent, uint8_t signal_strength, uint16_t delay, int16_t delay_unit );
+uint8_t siot_mesh_at_root_form_allow_to_connect_packet( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t* device_id );
+#endif
 uint8_t siot_mesh_at_root_find_best_route( const sa_time_val* currt, sa_time_val* time_to_next_event, uint16_t* target_id, uint16_t* bus_id_at_target, uint16_t* id_prev, uint16_t* bus_id_at_prev, uint16_t* id_next );
 //uint8_t siot_mesh_at_root_remove_last_hop_data( uint16_t target_id );
 void siot_mesh_at_root_add_updates_for_device_when_route_is_added( uint16_t id_target, uint16_t bus_to_send_from_target, uint16_t id_prev, uint16_t bust_to_send_from_prev, uint16_t id_next /*more data may be required*/ );

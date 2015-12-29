@@ -1410,10 +1410,6 @@ uint8_t handler_siot_mesh_send_packet( uint8_t is_ctr, sa_time_val* currt, waiti
 #endif
 #endif
 
-if ( target_id == 2 )
-{
-	target_id = target_id;
-}
 	if ( ret_code == SIOT_MESH_RET_ERROR_ROUTE_UNDER_CONSTRUCTION )
 	{
 		if ( is_ctr )
@@ -1462,7 +1458,7 @@ if ( target_id == 2 )
 		// TODO: iterate over all buses, if more than 1
 		*bus_id = 0;
 //		zepto_response_to_request( mem_h );
-		siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, target_id );
+		siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, &(wf->wait_time), mem_h, target_id );
 		zepto_parser_free_memory( mem_h );
 
 		return SIOT_MESH_RET_OK;
@@ -1472,7 +1468,7 @@ if ( target_id == 2 )
 uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( const sa_time_val* currt, MEMORY_HANDLE mem_h, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_hop, uint8_t conn_quality_at_first_receiver, bool payload_present, uint16_t request_id )
 {
 	// here we already know that the packet is good enough
-	parser_obj po, po1, po2;
+	parser_obj po, po1;
 	zepto_parser_init( &po, mem_h );
 	zepto_parser_init( &po1, mem_h );
 	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
@@ -1572,6 +1568,7 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( const sa_ti
 #endif // SA_DEBUG
 
 #ifdef SA_DEBUG
+	parser_obj po2;
 	uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
 	ZEPTO_DEBUG_ASSERT( remaining_size >= 2 ); // has already been checked by a caller
 	if ( payload_present )
@@ -1649,6 +1646,8 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	*bus_id = SIOT_MESH_BUS_UNDEFINED;
 	uint16_t next_hop_id;
 
+	siot_mesh_at_root_check_routes_to_retransmitters( currt, &(wf->wait_time) );
+
 	ret_code = siot_mesh_at_root_get_resend_task( mem_h, currt, device_id, bus_id, &next_hop_id, &(wf->wait_time) );
 	switch (ret_code )
 	{
@@ -1667,7 +1666,7 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 			ZEPTO_DEBUG_ASSERT( *device_id != SIOT_MESH_TARGET_UNDEFINED );
 			zepto_response_to_request( mem_h );
 			siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( *device_id, next_hop_id );
-			siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, wf, mem_h, *device_id );
+			siot_mesh_form_packets_from_santa_and_add_to_task_list( currt, &(wf->wait_time), mem_h, *device_id );
 			return SIOT_MESH_RET_OK;
 			break;
 		}
@@ -1700,25 +1699,25 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 
 
 	uint16_t target_id;
-		uint16_t bus_id_at_target;
-		uint16_t id_from;
-		uint16_t bus_id_at_prev;
-		uint16_t id_next;
+	uint16_t bus_id_at_target;
+	uint16_t id_from;
+	uint16_t bus_id_at_prev;
+	uint16_t id_next;
 	ret_code = siot_mesh_at_root_find_best_route( currt, &(wf->wait_time), &target_id, &bus_id_at_target, &id_from, &bus_id_at_prev, &id_next );
-		if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
-		{
-			ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_find_best_route( target_id = %d, bus_id_at_target = %d, id_from = %d, id_next = %d ) returns OK; calling siot_mesh_at_root_add_updates_for_device_when_route_is_added()...\n",  target_id, bus_id_at_target, id_from, id_next );
-			siot_mesh_at_root_add_updates_for_device_when_route_is_added( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
+	if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
+	{
+		ZEPTO_DEBUG_PRINTF_5( "siot_mesh_at_root_find_best_route( target_id = %d, bus_id_at_target = %d, id_from = %d, id_next = %d ) returns OK; calling siot_mesh_at_root_add_updates_for_device_when_route_is_added()...\n",  target_id, bus_id_at_target, id_from, id_next );
+		siot_mesh_at_root_add_updates_for_device_when_route_is_added( target_id, bus_id_at_target, id_from, bus_id_at_prev, id_next /*more data may be required*/ );
 	}
 
-		ret_code = handler_siot_mesh_prepare_route_update( mem_h, &target_id );
-		if ( ret_code == SIOT_MESH_RET_OK )
-		{
-			*device_id = target_id;
-			return SIOT_MESH_RET_PASS_TO_CCP;
-		}
-		else
-			zepto_parser_free_response( mem_h );
+	ret_code = handler_siot_mesh_prepare_route_update( mem_h, &target_id );
+	if ( ret_code == SIOT_MESH_RET_OK )
+	{
+		*device_id = target_id;
+		return SIOT_MESH_RET_PASS_TO_CCP;
+	}
+	else
+		zepto_parser_free_response( mem_h );
 		
 	return SIOT_MESH_RET_OK;
 }
@@ -2850,6 +2849,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				bool second_checksum_ok;
 				uint16_t packet_reported_checksum;
 				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				bool payload_present = remaining_size > 2;
 				if ( remaining_size >= 2 )
 				{
 					parser_obj rq_start_po;
@@ -2916,7 +2916,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						siot_mesh_init_last_hop_data_storage( currt, *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 					}
 
-					return SIOT_MESH_RET_PASS_TO_PROCESS;
+					return payload_present ? SIOT_MESH_RET_PASS_TO_PROCESS : SIOT_MESH_RET_OK;
 				}
 
 				if ( TTL == 0 )
@@ -3318,6 +3318,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				bool second_checksum_ok;
 				uint16_t packet_reported_checksum;
 				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				bool payload_present = remaining_size > 2;
 				if ( remaining_size >= 2 )
 				{
 					parser_obj rq_start_po;
@@ -3384,7 +3385,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						siot_mesh_init_last_hop_data_storage( currt, *mesh_val, request_id, last_hop_id, last_hop_bus_id, signal_level | ( error_cnt << 4 ) );
 					}
 
-					return SIOT_MESH_RET_PASS_TO_PROCESS;
+					return payload_present ? SIOT_MESH_RET_PASS_TO_PROCESS : SIOT_MESH_RET_OK;
 				}
 				break;
 			}
