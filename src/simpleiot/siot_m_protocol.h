@@ -143,7 +143,11 @@ extern "C" {
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA 10
 
 
-void siot_mesh_init_tables( sa_time_val* currt );  // TODO: this call reflects current development stage and may or may not survive in the future
+void siot_mesh_at_root_init( sa_time_val* currt );
+uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitter, uint8_t* bus_types, uint16_t bus_type_cnt );
+uint8_t siot_mesh_at_root_remove_device( uint16_t device_id );
+
+
 uint8_t write_bus_types_for_device_for_from_santa_packet( MEMORY_HANDLE mem_h, uint16_t device_id );
 uint16_t write_retransmitter_list_for_from_santa_packet( MEMORY_HANDLE mem_h );
 
