@@ -20,6 +20,19 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include <simpleiot/siot_common.h>
 
+
+#ifdef USED_AS_MASTER
+
+// data IDs (for communication with eeprom
+#define EEPROM_SLOT_DATA_SASP_NONCE_LW_ID 8 // Nonce Lower Watermark
+#define EEPROM_SLOT_DATA_SASP_NONCE_LS_ID 9 // Nonce to use For Sending
+
+// calls
+void eeprom_write( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data );
+void eeprom_read( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data );
+
+#else // USED_AS_MASTER
+
 // data IDs (for communication with eeprom
 #define EEPROM_SLOT_DATA_SASP_NONCE_LW_ID 0 // Nonce Lower Watermark
 #define EEPROM_SLOT_DATA_SASP_NONCE_LS_ID 1 // Nonce to use For Sending
@@ -39,25 +52,15 @@ Copyright (C) 2015 OLogN Technologies AG
 #define EEPROM_RET_REINCARNATION_ID_OK_ONE_OK 1
 #define EEPROM_RET_REINCARNATION_ID_OK_BOTH_OK 2
 
-
-// calls
 bool init_eeprom_access();
-
-
 uint8_t eeprom_check_reincarnation( uint8_t* rid ); // returns one of EEPROM_RET_REINCARNATION_ID_XXX
 bool eeprom_check_at_start(); // returns true, if all slots are OK; TODO: it should be upper level logic to determine what to do with each corrupted slot separately
 void eeprom_update_reincarnation_if_necessary( uint8_t* rid );
-
-#ifdef USED_AS_MASTER
-void eeprom_write( uint8_t id, uint8_t* data, uint16_t param );
-void eeprom_read( uint8_t id, uint8_t* data, uint16_t param);
-uint16_t eeprom_serialize( uint8_t* buff );
-void eeprom_deserialize( uint8_t* buff, uint16_t sz );
-#else // USED_AS_MASTER
 void eeprom_write( uint8_t id, uint8_t* data);
 void eeprom_read( uint8_t id, uint8_t* data);
 uint16_t eeprom_serialize( uint8_t* buff );
 void eeprom_deserialize( uint8_t* buff );
+
 #endif // USED_AS_MASTER
 
 #endif // __SA_EEPROM_H__

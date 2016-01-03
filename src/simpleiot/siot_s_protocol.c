@@ -36,8 +36,8 @@ SASP_DATA sasp_data[1];
 
 void handler_sasp_save_state( SASP_DATA* sasp_data, uint16_t storage_param )
 {
-	eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, sasp_data->nonce_lw, storage_param );
-	eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, sasp_data->nonce_ls, storage_param );
+	eeprom_write( storage_param, EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, SASP_NONCE_SIZE, sasp_data->nonce_lw );
+	eeprom_write( storage_param, EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, SASP_NONCE_SIZE, sasp_data->nonce_ls );
 }
 void sasp_init_eeprom_data_at_lifestart( SASP_DATA* sasp_data, uint16_t storage_param )
 {
@@ -51,13 +51,13 @@ void sasp_restore_from_backup( SASP_DATA* sasp_data, uint16_t storage_param )
 {
 	sasp_nonce_type future;
 
-	eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, sasp_data->nonce_lw, storage_param );
-	eeprom_read( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, sasp_data->nonce_ls, storage_param );
+	eeprom_read( storage_param, EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, SASP_NONCE_SIZE, sasp_data->nonce_lw );
+	eeprom_read( storage_param, EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, SASP_NONCE_SIZE, sasp_data->nonce_ls );
 
 	sa_uint48_init_by( future, sasp_data->nonce_ls );
 	sa_uint48_increment( future );
 	sa_uint48_roundup_to_the_nearest_multiple_of_0x100( future ); // now 'future' has a value supposedly saved in eeprom
-	eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, future, storage_param );
+	eeprom_write( storage_param, EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, SASP_NONCE_SIZE, future );
 }
 
 #else // USED_AS_MASTER
@@ -105,7 +105,7 @@ void SASP_increment_nonce_last_sent()
 		ZEPTO_MEMCPY( future, sasp_data->nonce_ls, SASP_NONCE_TYPE_SIZE );
 		sa_uint48_roundup_to_the_nearest_multiple_of_0x100( future );
 #ifdef USED_AS_MASTER
-		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, future, storage_param );
+		eeprom_write( storage_param, EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, SASP_NONCE_SIZE, future );
 #else // USED_AS_MASTER
 		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LS_ID, future );
 #endif // USED_AS_MASTER
@@ -127,7 +127,7 @@ void SASP_update_nonce_low_watermark( const sasp_nonce_type new_val )
 		sa_uint48_init_by( future, sasp_data->nonce_lw );
 		sa_uint48_roundup_to_the_nearest_multiple_of_0x100( future ); // now 'future' has a value supposedly saved in eeprom
 #ifdef USED_AS_MASTER
-		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, future, storage_param );
+		eeprom_write( storage_param, EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, SASP_NONCE_SIZE, future );
 #else // USED_AS_MASTER
 		eeprom_write( EEPROM_SLOT_DATA_SASP_NONCE_LW_ID, future );
 #endif // USED_AS_MASTER
