@@ -28,10 +28,12 @@ Copyright (C) 2015 OLogN Technologies AG
 #define SACCP_REPEAT_OLD_PROGRAM 0x3   /*Master: sends; Slave: receives*/
 #define SACCP_REUSE_OLD_PROGRAM 0x4    /*Master: sends; Slave: receives*/
 #define SACCP_PHY_AND_ROUTING_DATA 0x5 /*Master: sends; Slave: receives*/
+#define SACCP_STATS_REQUEST 0x6        /*Master: sends; Slave: receives*/ // TODO: think about other approaches
 
 #define SACCP_PAIRING_RESPONSE 0x7     /*Master: receives; Slave: sends*/
 #define SACCP_PROGRAMMING_RESPONSE 0x6 /*Master: receives; Slave: sends*/
-#define SACCP_PHY_AND_ROUTING_DATA 0x5 /*Master: receives; Slave: sends*/
+#define SACCP_PHY_AND_ROUTING_DATA 0x5 /*Master: receives; Slave: sends*/ // TODO: think about other approaches
+#define SACCP_STATS_RESPONSE 0x4       /*Master: receives; Slave: sends*/
 #define SACCP_REPLY_OK 0x0             /*Master: receives; Slave: sends*/
 #define SACCP_REPLY_EXCEPTION 0x1      /*Master: receives; Slave: sends*/
 #define SACCP_REPLY_ERROR 0x2          /*Master: receives; Slave: sends*/

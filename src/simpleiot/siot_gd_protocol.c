@@ -1473,4 +1473,9 @@ uint8_t handler_sagdp_receive_hlp( const sa_time_val* currt, waiting_for* wf, sa
 	}
 }
 
+bool sagdp_is_idle( SAGDP_DATA* sagdp_data )
+{
+	return sagdp_data->state == SAGDP_STATE_IDLE;
+}
+
 #endif // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_GDP) )
