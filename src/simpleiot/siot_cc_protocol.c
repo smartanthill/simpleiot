@@ -25,6 +25,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "siot_uint48.h"
 #include "siot_cc_protocol_constants.h"
 #include "siot_bodypart_list.h"
+#include "siot_stats_counters.h"
 
 typedef struct _SACCP_DATA
 {
@@ -536,9 +537,9 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa
 			// TODO: clarify processing of "additional bits"
 			uint8_t additional_bits = (packet_head_byte >> 3) & 0x7; // "additional bits" passed alongside with PHY-AND-ROUTING-DATA-REQUEST-BODY
 			ZEPTO_DEBUG_ASSERT( additional_bits == 0 ); // Route-Update-Request is always accompanied with SACCP "additional bits" equal to 0x0; bits [6..7] reserved (MUST be zeros)
-			//handler_siot_process_route_update_request( &po, mem_h );
-static uint8_t ctr = 0;
-ctr++;
+			zepto_parser_free_memory( mem_h );
+			siot_load_ctrs( mem_h );
+#if 0
 extern uint16_t DEVICE_SELF_ID;
 zepto_write_block( mem_h, "=== device 0x", 13 );
 zepto_write_uint8( mem_h, (uint8_t)( (DEVICE_SELF_ID&0xF) < 10 ? ('0' + (DEVICE_SELF_ID&0xF) ) : ('A' + (DEVICE_SELF_ID&0xF) ) ) );
@@ -546,6 +547,7 @@ zepto_write_uint8( mem_h, (uint8_t)( ((DEVICE_SELF_ID>>4)&0xF) < 10 ? ('0' + ((D
 zepto_write_block( mem_h, " test ctr = 0x", 14 );
 zepto_write_uint8( mem_h, (uint8_t)( ((ctr>>4)&0xF) < 10 ? ('0' + ((ctr>>4)&0xF) ) : ('A' + ((ctr>>4)&0xF) ) ) );
 zepto_write_uint8( mem_h, (uint8_t)( (ctr&0xF) < 10 ? ('0' + (ctr&0xF) ) : ('A' + (ctr&0xF) ) ) );
+#endif
 			uint16_t ret_head = SACCP_STATS_RESPONSE; // additional bits are 0
 			zepto_parser_encode_and_prepend_uint16( mem_h, ret_head );
 			uint8_t first_byte_back = SAGDP_P_STATUS_TERMINATING | SAGDP_P_STATUS_IS_CONTROL; // TODO: this is nowhere specified. Make sure this approach is OK

@@ -22,6 +22,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include "siot_s_protocol.h"
 #include "../simpleiot_hal/siot_mem_mngmt.h"
 #include "siot_eax_128.h"
+#include "siot_stats_counters.h"
 
 #define SASP_INTRA_PACKET_AUTHENTICATE_AND_DECRYPT_RET_OK 0
 #define SASP_INTRA_PACKET_AUTHENTICATE_AND_DECRYPT_RET_LAST_NONCE 1

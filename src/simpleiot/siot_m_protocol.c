@@ -20,6 +20,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #else // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_SIOTMP) )
 
 #include "siot_m_protocol.h"
+#include "siot_stats_counters.h"
 
 
 typedef struct _SIOT_MESH_LAST_HOP_DATA
@@ -2656,6 +2657,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				if ( actual_checksum != checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
@@ -2840,6 +2842,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				if ( actual_checksum != header_reported_checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
@@ -2870,7 +2873,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				if ( !second_checksum_ok )
 				{
-					// TODO: we have only a partially received packet; prepare NAK
+					//+++ TODO: we have only a partially received packet; prepare NAK
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
@@ -3312,6 +3316,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( actual_checksum != header_reported_checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
@@ -3338,7 +3343,8 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( !second_checksum_ok )
 				{
-					// TODO: we have only a partially received packet; prepare NAK
+					//+++ TODO: we have only a partially received packet; prepare NAK
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
@@ -3523,6 +3529,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 				{
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_PRINTF_1( "Totally broken packet received; dropped\n" );
 					zepto_parser_free_response( mem_h );
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
@@ -3545,7 +3552,8 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( !packet_ok ) // packet is broken; subject for NACK
 				{
-					// TODO: we have only a partially received packet; prepare NACK
+					//+++ TODO: we have only a partially received packet; prepare NACK
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
 					zepto_parser_free_response( mem_h );
 					return SIOT_MESH_RET_PASS_TO_SEND;
@@ -3643,6 +3651,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 				{
 					ZEPTO_DEBUG_PRINTF_1( "Totally broken packet received; dropped\n" );
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
 					zepto_parser_free_response( mem_h );
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
@@ -3665,7 +3674,8 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( !packet_ok ) // packet is broken; subject for NACK
 				{
-					// TODO: we have only a partially received packet; prepare NACK
+					//+++ TODO: we have only a partially received packet; prepare NACK
+					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
 					zepto_parser_free_response( mem_h );
 					return SIOT_MESH_RET_PASS_TO_SEND;
@@ -3800,7 +3810,10 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 		zepto_parser_init_by_parser( &po1, &po );
 
 		if ( actual_checksum != header_checksum ) // we have not received even a header -- total garbage received
+		{
+			SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
 			return SIOT_MESH_RET_GARBAGE_RECEIVED;
+		}
 
 		// now we have a packet that is at least, partially, received; further processing depends on the level of its integrity
 
@@ -3820,7 +3833,8 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 		if ( !packet_is_integral )
 		{
-			// TODO: we have only a partially received packet; prepare NACK
+			//+++ TODO: we have only a partially received packet; prepare NACK
+			SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
 			ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
 			return SIOT_MESH_RET_PASS_TO_SEND;
 		}
@@ -4268,6 +4282,7 @@ validate_tables();
 		}
 		else
 		{
+			SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_RESEND_GDP_OVERCOUNT )
 #ifdef USED_AS_RETRANSMITTER
 			uint16_t checksum;
 			siot_mesh_form_unicast_packet( mem_h, link_id, bus_id, target_id, true, &checksum );
@@ -4347,6 +4362,7 @@ validate_tables();
 
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val )
 {
+	SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_SP_REPORTS_BROKEN )
 	if ( *mesh_val < 2 )
 		if ( siot_mesh_clean_last_hop_data_storage_if_single_element( *mesh_val ) )
 			*mesh_val = 0xFF;
@@ -4368,6 +4384,8 @@ void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE re
 print_tables();
 validate_tables();
 
+	SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST )
+
 	// OPTIONAL-ORIGINAL-RT-CHECKSUM and discarding table
 	if ( discard_rt ) // bit[0] being DISCARD-RT-FIRST (indicating that before processing MODIFICATIONS-LIST, the whole Routing Table must be discarded)
 	{
@@ -4381,6 +4399,7 @@ validate_tables();
 		checksum_before_read |= ((uint16_t)zepto_parse_uint8( po )) << 8;
 		if ( checksum_before_read != checksum_before_calc )
 		{
+			SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_1ST_RT_CHECKSUM_FAILED )
 			ZEPTO_DEBUG_PRINTF_3( "Bad route table checksum: expected 0x%04x, calculated: 0x%04x\n", checksum_before_read, checksum_before_calc );
 			ZEPTO_DEBUG_PRINTF_1( "bad route table checksum detected after applying update" );
 			zepto_parser_encode_and_append_uint8( reply, SIOT_MESH_TABLE_UPDATE_RET_CODE_CHECKSUM_BEFORE_FAILED );
@@ -4483,6 +4502,7 @@ validate_tables();
 	if ( checksum_before_read != checksum_before_calc )
 	{
 		ZEPTO_DEBUG_PRINTF_3( "bad route table checksum detected after applying update: expected 0x%04x, calculated: 0x%04x\n", checksum_before_read, checksum_before_calc );
+		SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_2ND_RT_CHECKSUM_FAILED )
 		zepto_parser_encode_and_append_uint8( reply, SIOT_MESH_TABLE_UPDATE_RET_CODE_CHECKSUM_AFTER_FAILED );
 		return;
 	}

@@ -20,6 +20,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #else // (defined VERY_DEBUG) && ( defined VERY_DEBUG_SIOT_GDP) )
 
 #include "siot_gd_protocol.h"
+#include "siot_stats_counters.h"
 
 // SAGDP timer constants
 // TODO: revise when values are finalized in the documentation
