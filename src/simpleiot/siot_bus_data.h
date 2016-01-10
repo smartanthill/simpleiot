@@ -21,6 +21,9 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_common.h"
 #include "siot_data_types.h"
+#include "siot_stats_counters.h"
+
+extern uint16_t* siot_stats_counters_bus_specific_16;
 
 #define SIOT_COMMUNICATION_BUS_TYPE_UART
 

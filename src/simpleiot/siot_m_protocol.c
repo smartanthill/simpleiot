@@ -1680,25 +1680,6 @@ uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HAN
 	}
 	zepto_parser_free_memory( mem_h );
 
-
-
-
-
-
-#ifdef SIOT_MESH_BTLE_MODE
-	ret_code = siot_mesh_at_root_form_allow_to_connect_packet( currt, &(wf->wait_time), mem_h, device_id );
-	if ( ret_code == SIOT_MESH_AT_ROOT_RET_OK )
-	{
-		return SIOT_MESH_RET_PASS_TO_SEND;
-	}
-#endif
-
-
-
-
-
-
-
 	uint16_t target_id;
 	uint16_t bus_id_at_target;
 	uint16_t id_from;
@@ -1782,6 +1763,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				uint16_t target_id = header >> 1;
 				if ( target_id != 0 )
 				{
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 					ZEPTO_DEBUG_PRINTF_2( "Packet for device %d received (from Santa); ignored\n", target_id );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
@@ -1868,6 +1850,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					uint16_t next_hop = zepto_parse_encoded_uint16( &po );
 					if ( next_hop != 0 )
 					{
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 						ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (To-Santa (%d) ); ignored\n", next_hop, packet_type );
 						return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 					}
@@ -1912,8 +1895,9 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					if ( actual_checksum != checksum )
 					{
 						// TODO: we have only a partially received packet; prepare NACK
-						ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
-						return SIOT_MESH_RET_PASS_TO_SEND;
+//						ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//						return SIOT_MESH_RET_PASS_TO_SEND;
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
 					}
 					else
 					{
@@ -1924,13 +1908,13 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				else // packet is broken; subject for NAK
 				{
 					// TODO: we have only a partially received packet; prepare NACK
-					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
-					return SIOT_MESH_RET_PASS_TO_SEND;
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
 				ZEPTO_DEBUG_ASSERT( NULL == "Error: we should not reach this point\n" );
 				break;
-			}
 			case SIOT_MESH_ROUTING_ERROR_PACKET:
 			{
 				// Samp-Ack-Nack-Packet: | SAMP-ACK-NACK-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | Target-Address | NUMBER-OF-ERRORS | ACK-CHESKSUM | HEADER-CHECKSUM | OPTIONAL-DELAY-UNIT | OPTIONAL-DELAY-PASSED | OPTIONAL-DELAY-LEFT |
@@ -1993,8 +1977,9 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				else // packet is broken; subject for NAK
 				{
 					// TODO: we have only a partially received packet; prepare NACK
-					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
-					return SIOT_MESH_RET_PASS_TO_SEND;
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 			}
 			case SIOT_MESH_FROM_SANTA_DATA_PACKET:
@@ -2021,6 +2006,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 		if ( is_from_root )
 		{
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 			ZEPTO_DEBUG_PRINTF_1( "Packet directed from ROOT received; ignored\n" );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 		}
@@ -2048,6 +2034,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		uint16_t next_hop = zepto_parse_encoded_uint16( &po );
 		if ( next_hop != 0 )
 		{
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 			ZEPTO_DEBUG_PRINTF_2( "Packet for device %d received (unicast); ignored\n", next_hop );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 		}
@@ -2085,8 +2072,9 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 			if ( actual_checksum != packet_reported_checksum )
 			{
 				// TODO: we have only a partially received packet; prepare NACK
-				ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
-				return SIOT_MESH_RET_PASS_TO_SEND;
+//				ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//				return SIOT_MESH_RET_PASS_TO_SEND;
+				return SIOT_MESH_RET_GARBAGE_RECEIVED;
 			}
 			else
 			{
@@ -2108,8 +2096,9 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		else // packet is broken; subject for NAK
 		{
 			// TODO: we have only a partially received packet; prepare NACK
-			ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
-			return SIOT_MESH_RET_PASS_TO_SEND;
+//			ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//			return SIOT_MESH_RET_PASS_TO_SEND;
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
 		}
 
 		ZEPTO_DEBUG_ASSERT( NULL == "Error: we should not reach this point\n" );
@@ -2636,6 +2625,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				uint16_t target_id = header >> 1;
 				if ( target_id != DEVICE_SELF_ID )
 				{
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 					ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (ACK-NACK); ignored (self id: %d)\n", target_id, DEVICE_SELF_ID );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
@@ -2657,7 +2647,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				if ( actual_checksum != checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
@@ -2842,7 +2832,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				if ( actual_checksum != header_reported_checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
@@ -2874,7 +2864,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				if ( !second_checksum_ok )
 				{
 					//+++ TODO: we have only a partially received packet; prepare NAK
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
@@ -2925,6 +2915,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( TTL == 0 )
 				{
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_TTL_MAX )
 					return SIOT_MESH_RET_OK;
 				}
 				TTL--;
@@ -3296,6 +3287,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				ZEPTO_DEBUG_PRINTF_1( ";\n" );
 				if ( !among_targets )
 				{
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 					ZEPTO_DEBUG_PRINTF_2( "Packet not for device received (from Santa); ignored (self id: %d)\n", DEVICE_SELF_ID );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
@@ -3316,7 +3308,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( actual_checksum != header_reported_checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
@@ -3344,7 +3336,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( !second_checksum_ok )
 				{
 					//+++ TODO: we have only a partially received packet; prepare NAK
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
@@ -3417,6 +3409,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 					TTL = header >> 5;
 					if ( TTL == 0 )
 					{
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_TTL_MAX )
 						ZEPTO_DEBUG_PRINTF_1( "Packet with TTL = 0 received; dropped\n" );
 						return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 					}
@@ -3470,6 +3463,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 					next_hop = zepto_parse_encoded_uint16( &po );
 					if ( next_hop != DEVICE_SELF_ID )
 					{
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 						ZEPTO_DEBUG_PRINTF_2( "Packet for device %d received (Forward-To-Santa); ignored\n", next_hop );
 						return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 					}
@@ -3529,7 +3523,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 				{
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
 					ZEPTO_DEBUG_PRINTF_1( "Totally broken packet received; dropped\n" );
 					zepto_parser_free_response( mem_h );
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
@@ -3553,10 +3547,11 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( !packet_ok ) // packet is broken; subject for NACK
 				{
 					//+++ TODO: we have only a partially received packet; prepare NACK
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
-					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
 					zepto_parser_free_response( mem_h );
-					return SIOT_MESH_RET_PASS_TO_SEND;
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
 				// HEADER-CHECKSUM (writing)
@@ -3580,6 +3575,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 			case SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET:
 			case SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET:
 			{
+				SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 				ZEPTO_DEBUG_PRINTF_2( "Packet type %d received; not expected; ignored\n", (header >> 1) & 0x7 );
 				return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 			}
@@ -3596,6 +3592,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				uint16_t TTL = header >> 5;
 				if ( TTL == 0 )
 				{
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_TTL_MAX )
 					ZEPTO_DEBUG_PRINTF_1( "Packet with TTL = 0 received; dropped\n" );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
@@ -3651,7 +3648,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 				{
 					ZEPTO_DEBUG_PRINTF_1( "Totally broken packet received; dropped\n" );
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
 					zepto_parser_free_response( mem_h );
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
@@ -3675,10 +3672,11 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				if ( !packet_ok ) // packet is broken; subject for NACK
 				{
 					//+++ TODO: we have only a partially received packet; prepare NACK
-					SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
-					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
 					zepto_parser_free_response( mem_h );
-					return SIOT_MESH_RET_PASS_TO_SEND;
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
 				// HEADER-CHECKSUM (writing)
@@ -3725,12 +3723,14 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 #else // USED_AS_RETRANSMITTER
 			case SIOT_MESH_ROUTING_ERROR_PACKET:
 			{
+				SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 				ZEPTO_DEBUG_PRINTF_2( "Packet type %d received; not expected; ignored\n", (header >> 1) & 0x7 );
 				return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 			}
 #endif // USED_AS_RETRANSMITTER
 			default:
 			{
+				SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 				ZEPTO_DEBUG_PRINTF_2( "Packet type %d received; not implemented\n", (header >> 1) & 0x7 );
 //				ZEPTO_DEBUG_ASSERT( NULL == "Error: processing of mesh packets of this type is not implemented\n" );
 				return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
@@ -3752,6 +3752,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 #if !defined USED_AS_RETRANSMITTER
 		if ( !is_from_root )
 		{
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 			ZEPTO_DEBUG_PRINTF_1( "Packet directed to ROOT received; ignored\n" );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 		}
@@ -3795,7 +3796,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 #else // USED_AS_RETRANSMITTER
 		if ( target_id != DEVICE_SELF_ID )
 		{
-			// TODO: it is much more complicated in case of retransmitter
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 			ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (unicast); ignored (self id: %d)\n", target_id, DEVICE_SELF_ID );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 		}
@@ -3811,7 +3812,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 		if ( actual_checksum != header_checksum ) // we have not received even a header -- total garbage received
 		{
-			SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_HEADER_CHECKSUM_FAILED )
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
 			return SIOT_MESH_RET_GARBAGE_RECEIVED;
 		}
 
@@ -3834,9 +3835,10 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 		if ( !packet_is_integral )
 		{
 			//+++ TODO: we have only a partially received packet; prepare NACK
-			SIOUT_INCREMENT_CTR( SIOT_STATS_CTR_ROUTE_UPDATE_REQUEST_PACKET_FULL_CHECKSUM_FAILED )
-			ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
-			return SIOT_MESH_RET_PASS_TO_SEND;
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
+//			ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//			return SIOT_MESH_RET_PASS_TO_SEND;
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
 		}
 		else
 		{
@@ -3847,6 +3849,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 			{
 				if ( !is_from_root ) // well, for us but not from root (looks like this packet is heavily misdirected) TODO: should we perform any action?
 				{
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 					ZEPTO_DEBUG_PRINTF_1( "Packet directed to us NOT from ROOT received; ignored\n" );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
