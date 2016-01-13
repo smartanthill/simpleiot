@@ -1765,7 +1765,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
-					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+//					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
 					if ( ! zepto_parser_is_result_valid( &po ) )
 					{
 						// TODO: cleanup, if necessary
@@ -2709,7 +2709,12 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// Target-Address
 				header = zepto_parse_encoded_uint16_uncertain( &po );
-				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
+				if ( (header & 1) != 0 )
+				{
+					// we have not yet implemented extra data
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
 				uint16_t target_id = header >> 1;
 				if ( target_id != DEVICE_SELF_ID )
 				{
@@ -3002,7 +3007,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					//+++ TODO: we have only a partially received packet; prepare NAK
 					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
 //					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
-					return SIOT_MESH_RET_PASS_TO_SEND;
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
 				// Now we can assume that we have received a quite good packet, and we will process it further
@@ -3495,10 +3501,11 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				}
 				if ( !second_checksum_ok )
 				{
-					//+++ TODO: we have only a partially received packet; prepare NAK
+					//+++ TODO: we have only a partially received packet; prepare NACK
 					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
-					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
-					return SIOT_MESH_RET_PASS_TO_SEND;
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
 				// Now we can assume that we have received a quite good packet, and we will process it further
@@ -3965,12 +3972,6 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
 				{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 			}
-			if ( ! zepto_parser_is_result_valid( &po ) )
-			{
-				// TODO: cleanup, if necessary
-				SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
-				{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
-			}
 			extra_headers_present = header & 0x1;
 			uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 			switch ( generic_flags )
@@ -4023,12 +4024,6 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 		header_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 		zepto_parser_init_by_parser_uncertain( &po1, &po );
 
-		if ( ! zepto_parser_is_result_valid( &po ) )
-		{
-			// TODO: cleanup, if necessary
-			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
-			{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
-		}
 		if ( ! zepto_parser_is_result_valid( &po ) )
 		{
 			// TODO: cleanup, if necessary
