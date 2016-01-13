@@ -56,6 +56,21 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h
 	return accum_val;
 }
 
+uint16_t zepto_parser_calculate_checksum_of_part_of_request_uncertain( MEMORY_HANDLE mem_h, parser_obj_uncertain* po_start, uint16_t sz, uint16_t accum_val )
+{
+	uint16_t i;
+	parser_obj_uncertain po;
+	zepto_parser_init_by_parser_uncertain( &po, po_start );
+	for ( i=0; i<sz; i++ )
+	{
+		accum_val += zepto_parse_uint8_uncertain( &po ); // do something simple for a while
+		// TODO: actual implementation
+	}
+	ZEPTO_DEBUG_ASSERT( zepto_parser_is_result_valid( &po ) );
+	return accum_val;
+}
+
+
 #ifdef USED_AS_MASTER
 
 // NOTE: On a ROOT (MASTER) side any implementation is inevitably quite complicated as
@@ -1711,10 +1726,10 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 	// Since that we first try to quickly figure out what kind of "joy" we have actually received, and then to perform full respective processing.
 
 
-	parser_obj po, po1, po2;
-	zepto_parser_init( &po, mem_h );
-	zepto_parser_init( &po1, mem_h );
-	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
+	parser_obj_uncertain po, po1, po2;
+	zepto_parser_init_uncertain( &po, mem_h );
+	zepto_parser_init_uncertain( &po1, mem_h );
+	uint16_t total_packet_sz = zepto_parsing_remaining_bytes_uncertain( &po );
 
 #ifdef SA_DEBUG
 	{
@@ -1728,7 +1743,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 	}
 #endif // SA_DEBUG
 
-	uint16_t header = zepto_parse_encoded_uint16( &po );
+	uint16_t header = zepto_parse_encoded_uint16_uncertain( &po );
 	// TODO: here and then use bit-field processing instead
 	if ( header & 1 ) // predefined packet types
 	{
@@ -1751,35 +1766,45 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				while ( extra_headers_present )
 				{
 					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 				}
 
 				// LAST-HOP
-				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
+				uint16_t last_hop_id = zepto_parse_encoded_uint16_uncertain( &po );
 				ZEPTO_DEBUG_ASSERT( last_hop_id != 0 ); // any but ROOT
 
 				// Target-Address
-				header = zepto_parse_encoded_uint16( &po );
+				header = zepto_parse_encoded_uint16_uncertain( &po );
 				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
 				uint16_t target_id = header >> 1;
 				if ( target_id != 0 )
 				{
-					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
+//					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 					ZEPTO_DEBUG_PRINTF_2( "Packet for device %d received (from Santa); ignored\n", target_id );
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
 
 				// NUMBER-OF-ERRORS
-				uint16_t num_of_errors = zepto_parse_encoded_uint16( &po );
+				uint16_t num_of_errors = zepto_parse_encoded_uint16_uncertain( &po );
 
 				// ACK-CHESKSUM
-				uint16_t ack_checksum = zepto_parse_uint8( &po );
-				ack_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+				uint16_t ack_checksum = zepto_parse_uint8_uncertain( &po );
+				ack_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 
 				// HEADER-CHECKSUM
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t checksum = zepto_parse_uint8( &po );
-				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
@@ -1793,6 +1818,11 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					// OPTIONAL-DELAY-PASSED
 					
 					// OPTIONAL-DELAY-LEFT
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 				}
 
 				siot_mesh_at_root_remove_resend_task_by_hash( ack_checksum, currt, &(wf->wait_time) );
@@ -1814,15 +1844,20 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
-					header = zepto_parse_encoded_uint16( &po );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 					extra_headers_present = header & 0x1;
 					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 					switch ( generic_flags )
 					{
 						case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
 						{
-							zepto_parse_encoded_uint16( &po ); // last_hop_bus_id; just skip
-							zepto_parse_encoded_uint8( &po ); // connection quality; just skip
+							zepto_parse_encoded_uint16_uncertain( &po ); // last_hop_bus_id; just skip
+							zepto_parse_encoded_uint8_uncertain( &po ); // connection quality; just skip
 							break;
 						}
 						case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
@@ -1844,13 +1879,13 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				if ( packet_type == SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET )
 				{
 					// FIRST-HOP (reading)
-					first_hop = zepto_parse_encoded_uint16( &po );
+					first_hop = zepto_parse_encoded_uint16_uncertain( &po );
 
 					// NEXT-HOP
-					uint16_t next_hop = zepto_parse_encoded_uint16( &po );
+					uint16_t next_hop = zepto_parse_encoded_uint16_uncertain( &po );
 					if ( next_hop != 0 )
 					{
-						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
+//						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 						ZEPTO_DEBUG_PRINTF_3( "Packet for device %d received (To-Santa (%d) ); ignored\n", next_hop, packet_type );
 						return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 					}
@@ -1863,35 +1898,45 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 
 				// (FORWARDED-)SOURCE-ID
-				*src_id = zepto_parse_encoded_uint16( &po );
+				*src_id = zepto_parse_encoded_uint16_uncertain( &po );
 
 				// (FORWARDED-)BUS-ID-AT-SOURCE
-				uint16_t bus_id_at_src = zepto_parse_encoded_uint16( &po );
+				uint16_t bus_id_at_src = zepto_parse_encoded_uint16_uncertain( &po );
 
 				// REQUEST-ID
-				uint16_t request_id = zepto_parse_encoded_uint16( &po );
+				uint16_t request_id = zepto_parse_encoded_uint16_uncertain( &po );
 
 				ZEPTO_DEBUG_PRINTF_5( "Packet %d TO-SANTA (%d) from device %d, first hop = %d received\n", request_id, packet_type, *src_id, first_hop  );
 
 				// OPTIONAL-PAYLOAD-SIZE
 
 				// HEADER-CHECKSUM
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t checksum = zepto_parse_uint8( &po );
-				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 				if ( remaining_size >= 2 )
 				{
-					zepto_parser_init_by_parser( &po2, &po );
-					zepto_parse_skip_block( &po, remaining_size - 2 );
-					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
-					checksum = zepto_parse_uint8( &po );
-					checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parse_skip_block_uncertain( &po, remaining_size - 2 );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+					checksum = zepto_parse_uint8_uncertain( &po );
+					checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 					if ( actual_checksum != checksum )
 					{
 						// TODO: we have only a partially received packet; prepare NACK
@@ -1915,6 +1960,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				ZEPTO_DEBUG_ASSERT( NULL == "Error: we should not reach this point\n" );
 				break;
+			}
 			case SIOT_MESH_ROUTING_ERROR_PACKET:
 			{
 				// Samp-Ack-Nack-Packet: | SAMP-ACK-NACK-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | Target-Address | NUMBER-OF-ERRORS | ACK-CHESKSUM | HEADER-CHECKSUM | OPTIONAL-DELAY-UNIT | OPTIONAL-DELAY-PASSED | OPTIONAL-DELAY-LEFT |
@@ -1928,46 +1974,61 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
 				}
 
 				// ERROR-CODE
-				uint8_t error_code = zepto_parse_uint8( &po );
+				uint8_t error_code = zepto_parse_uint8_uncertain( &po );
 
 				// HEADER-CHECKSUM
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t checksum = zepto_parse_uint8( &po );
-				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 
 				// packet integrity
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 				bool packet_is_integral = remaining_size >= 2;
 				if ( packet_is_integral )
 				{
-					zepto_parser_init_by_parser( &po1, &po );
-					zepto_parser_init_by_parser( &po2, &po );
-					zepto_parse_skip_block( &po1, remaining_size - 2 );
-					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
-					checksum = zepto_parse_uint8( &po1 );
-					checksum |= ((uint16_t)zepto_parse_uint8( &po1 )) << 8;
+					zepto_parser_init_by_parser_uncertain( &po1, &po );
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+					checksum = zepto_parse_uint8_uncertain( &po1 );
+					checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po1 )) << 8;
 					packet_is_integral = actual_checksum == checksum;
+				}
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 				if ( packet_is_integral )
 				{
 					// NOTE/TODO: here we rely only on checksum-based integrity check; we should be ready to failure of any of zepto_parse_encoded_uint16() calls below
 					// TODO: what should we do with incorrectly constructed packets?
-					uint16_t reporting_device_id = zepto_parse_encoded_uint16( &po );
-					uint16_t failed_hop_id = zepto_parse_encoded_uint16( &po );
+					uint16_t reporting_device_id = zepto_parse_encoded_uint16_uncertain( &po );
+					uint16_t failed_hop_id = zepto_parse_encoded_uint16_uncertain( &po );
 					if ( failed_hop_id == 0 )
 						failed_hop_id = SIOT_MESH_NEXT_HOP_UNDEFINED;
 					else
 						failed_hop_id --;
-					uint16_t failed_target = zepto_parse_encoded_uint16( &po );
-					uint16_t original_packet_checksum = zepto_parse_encoded_uint16( &po );
+					uint16_t failed_target = zepto_parse_encoded_uint16_uncertain( &po );
+					uint16_t original_packet_checksum = zepto_parse_encoded_uint16_uncertain( &po );
 
 					// TODO: think about potential cases, say, an error is reported based on the old state of the routing table while a new one is already in effect (may require more data to be added to the packet)
 					siot_mesh_at_root_remove_link_to_target_route_error_reported( reporting_device_id, failed_hop_id, failed_target, true );
@@ -2006,7 +2067,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 		if ( is_from_root )
 		{
-			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
+//			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 			ZEPTO_DEBUG_PRINTF_1( "Packet directed from ROOT received; ignored\n" );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 		}
@@ -2014,7 +2075,12 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		// now we're done with the header; proceeding to optional headers...
 		while ( extra_headers_present )
 		{
-			header = zepto_parse_encoded_uint16( &po );
+			header = zepto_parse_encoded_uint16_uncertain( &po );
+			if ( ! zepto_parser_is_result_valid( &po ) )
+			{
+				// TODO: cleanup, if necessary
+				return SIOT_MESH_RET_GARBAGE_RECEIVED;
+			}
 			extra_headers_present = header & 0x1;
 			uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 			switch ( generic_flags )
@@ -2031,44 +2097,54 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 		}
 
 		// NEXT-HOP
-		uint16_t next_hop = zepto_parse_encoded_uint16( &po );
+		uint16_t next_hop = zepto_parse_encoded_uint16_uncertain( &po );
 		if ( next_hop != 0 )
 		{
-			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
+//			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
 			ZEPTO_DEBUG_PRINTF_2( "Packet for device %d received (unicast); ignored\n", next_hop );
 			return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 		}
 
 		// LAST-HOP
-		uint16_t last_hop = zepto_parse_encoded_uint16( &po );
+		uint16_t last_hop = zepto_parse_encoded_uint16_uncertain( &po );
 
 		// Non-Root-Address
 		// we implement quick coding assuming no extra data follow
 		// TODO: full implementation with VIA fields, etc
-		*src_id = zepto_parse_encoded_uint16( &po );
+		*src_id = zepto_parse_encoded_uint16_uncertain( &po );
 		ZEPTO_DEBUG_ASSERT( (*src_id & 1) == 0 ); // TODO: provide full implementation
 		*src_id >>= 1;
 
 		// OPTIONAL-PAYLOAD-SIZE
 
 		// HEADER-CHECKSUM
-		uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-		uint16_t header_checksum = zepto_parse_uint8( &po );
-		header_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-		zepto_parser_init_by_parser( &po1, &po );
+		uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+		uint16_t header_checksum = zepto_parse_uint8_uncertain( &po );
+		header_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+		zepto_parser_init_by_parser_uncertain( &po1, &po );
 
+		if ( ! zepto_parser_is_result_valid( &po ) )
+		{
+			// TODO: cleanup, if necessary
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
+		}
 		if ( actual_checksum != header_checksum ) // we have not received even a header -- total garbage received
 			return SIOT_MESH_RET_GARBAGE_RECEIVED;
 
-		uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+		uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 		uint16_t packet_reported_checksum;
 		if ( remaining_size >= 2 )
 		{
-			zepto_parser_init_by_parser( &po2, &po );
-			zepto_parse_skip_block( &po, remaining_size - 2 );
-			actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
-			packet_reported_checksum = zepto_parse_uint8( &po );
-			packet_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+			zepto_parser_init_by_parser_uncertain( &po2, &po );
+			zepto_parse_skip_block_uncertain( &po, remaining_size - 2 );
+			actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+			packet_reported_checksum = zepto_parse_uint8_uncertain( &po );
+			packet_reported_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+			if ( ! zepto_parser_is_result_valid( &po ) )
+			{
+				// TODO: cleanup, if necessary
+				return SIOT_MESH_RET_GARBAGE_RECEIVED;
+			}
 			if ( actual_checksum != packet_reported_checksum )
 			{
 				// TODO: we have only a partially received packet; prepare NACK
@@ -2079,10 +2155,10 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 			else
 			{
 				// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po2 );
-				zepto_parser_init_by_parser( &po1, &po2 );
-				zepto_parse_skip_block( &po1, remaining_size - 2 );
-				zepto_convert_part_of_request_to_response( mem_h, &po2, &po1 );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po2 );
+				zepto_parser_init_by_parser_uncertain( &po1, &po2 );
+				zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
+				zepto_convert_part_of_request_to_response_uncertain( mem_h, &po2, &po1 );
 
 				if ( ack_requested )
 				{
@@ -2570,12 +2646,14 @@ void siot_mesh_from_santa_pretask_holder_release( SIOT_MESH_FROM_SANTA_PRETASK_H
 
 #endif // USED_AS_RETRANSMITTER
 
+#define PARSER_CHECKED_READ_UINT8( parder_opbj_ptr, num_ptr, failure_step ) { if ( !zepto_parse_uint8_checked( parder_opbj_ptr, num_ptr ) ) faileure_step }
+
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint8_t* mesh_val, uint8_t signal_level, uint8_t error_cnt, uint16_t* bus_id, uint16_t* ack_bus_id )
 {
-	parser_obj po, po1, po2;
-	zepto_parser_init( &po, mem_h );
-	zepto_parser_init( &po1, mem_h );
-	uint16_t total_packet_sz = zepto_parsing_remaining_bytes( &po );
+	parser_obj_uncertain po, po1, po2;
+	zepto_parser_init_uncertain( &po, mem_h );
+	zepto_parser_init_uncertain( &po1, mem_h );
+	uint16_t total_packet_sz = zepto_parsing_remaining_bytes_uncertain( &po );
 
 #ifdef SA_DEBUG
 	{
@@ -2591,7 +2669,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 	*mesh_val = 0xFF; // valid values make sense only in certain cases and will be loaded then
 
-	uint16_t header = zepto_parse_encoded_uint16( &po );
+	uint16_t header = zepto_parse_encoded_uint16_uncertain( &po );
 	// TODO: here and then use bit-field processing instead
 	if ( header & 1 ) // predefined packet types
 	{
@@ -2613,14 +2691,20 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
-					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
+//					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
 				}
 
 				// LAST-HOP
-				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
+				uint16_t last_hop_id = zepto_parse_encoded_uint16_uncertain( &po );
 
 				// Target-Address
-				header = zepto_parse_encoded_uint16( &po );
+				header = zepto_parse_encoded_uint16_uncertain( &po );
 				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
 				uint16_t target_id = header >> 1;
 				if ( target_id != DEVICE_SELF_ID )
@@ -2631,19 +2715,25 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 
 				// NUMBER-OF-ERRORS
-				uint16_t num_of_errors = zepto_parse_encoded_uint16( &po );
+				uint16_t num_of_errors = zepto_parse_encoded_uint16_uncertain( &po );
 
 				// ACK-CHESKSUM
-				uint16_t ack_checksum = zepto_parse_uint8( &po );
-				ack_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+				uint16_t ack_checksum = zepto_parse_uint8_uncertain( &po );
+				ack_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 
 				ZEPTO_DEBUG_PRINTF_4( "SIOT_MESH_ACK_NACK_PACKET: LAST-HOP: %d, target_id: %d, ack_checksum: 0x%04x\n", last_hop_id, target_id, ack_checksum );
 
 				// HEADER-CHECKSUM
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t checksum = zepto_parse_uint8( &po );
-				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
@@ -2658,6 +2748,12 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					// OPTIONAL-DELAY-PASSED
 					
 					// OPTIONAL-DELAY-LEFT
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 				}
 
 				// TODO: check full-packet checksum
@@ -2687,11 +2783,11 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 			{
 				// Being optimistic regarding packet integrity we declare a number of parser objects denoting 
 				// starting (and sometimes ending0 positions of certain parts of the packet to avoid double parsing
-				parser_obj po_target_start, po_target_end;
-				parser_obj po_bustype_start, po_bustype_end;
-				parser_obj po_payload_start, po_payload_end;
-				parser_obj po_headers_start, po_headers_end; // header and optional headers
-				parser_obj po_retransmitter_start;
+				parser_obj_uncertain po_target_start, po_target_end;
+				parser_obj_uncertain po_bustype_start, po_bustype_end;
+				parser_obj_uncertain po_payload_start, po_payload_end;
+				parser_obj_uncertain po_headers_start, po_headers_end; // header and optional headers
+				parser_obj_uncertain po_retransmitter_start;
 
 				// WARNING: we should not do any irreversible changes until checksums are virified; 
 				//          thus, until that point all data should only be locally collected, and applied only after checksum verification (or do two passes)
@@ -2705,11 +2801,17 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				uint16_t TTL = header >> 5;
 				// now we're done with the header; proceeding to optional headers...
 				uint8_t ehp = extra_headers_present;
-				zepto_parser_init_by_parser( &po_headers_start, &po );
+				zepto_parser_init_by_parser_uncertain( &po_headers_start, &po );
 				while ( ehp )
 				{
-					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'FROM-SANTA\' packet are not yet implemented" );
-					header = zepto_parse_encoded_uint16( &po );
+//					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'FROM-SANTA\' packet are not yet implemented" );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 					ehp = header & 0x1;
 					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 					switch ( generic_flags )
@@ -2736,19 +2838,19 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				ZEPTO_DEBUG_ASSERT( !explicit_time_scheduling ); // not yet implemented
 				ZEPTO_DEBUG_ASSERT( !is_probe ); // not yet implemented
 
-				zepto_parser_init_by_parser( &po_headers_end, &po );
+				zepto_parser_init_by_parser_uncertain( &po_headers_end, &po );
 
 
 				// LAST-HOP
-				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
+				uint16_t last_hop_id = zepto_parse_encoded_uint16_uncertain( &po );
 //				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// LAST-HOP-BUS-ID
-				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po );
+				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16_uncertain( &po );
 //				ZEPTO_DEBUG_ASSERT( last_hop_bus_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// REQUEST-ID
-				uint16_t request_id = zepto_parse_encoded_uint16( &po );
+				uint16_t request_id = zepto_parse_encoded_uint16_uncertain( &po );
 
 				ZEPTO_DEBUG_PRINTF_3( "FROM-SANTA: last_hop_id = %d, request_id = %d, retransmitters: ", last_hop_id, request_id );
 
@@ -2756,18 +2858,18 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// MULTIPLE-RETRANSMITTING-ADDRESSES 
 				// At this point we should quickly go through and to check only whether we're in the list (if we're a retransmitter), or just to skip this part, if we're a terminating device
-				zepto_parser_init_by_parser( &po_retransmitter_start, &po );
+				zepto_parser_init_by_parser_uncertain( &po_retransmitter_start, &po );
 
 				bool among_retransmitters = false;
 				uint16_t retransmitter_cnt = 0;
-				header = zepto_parse_encoded_uint16( &po );
+				header = zepto_parse_encoded_uint16_uncertain( &po );
 				while ( header != 0 )
 				{
 					uint16_t retr_id = header >> 1;
 					if ( retr_id == 0 )
 					{
-						ZEPTO_DEBUG_ASSERT( 0 == "Case retransmitter-header = 0 has not been considered yet" );
-						return 0;
+//						ZEPTO_DEBUG_ASSERT( 0 == "Case retransmitter-header = 0 has not been considered yet" );
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
 					}
 					retr_id --;
 
@@ -2776,59 +2878,83 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 						among_retransmitters = true;
 					else
 						retransmitter_cnt ++;
-					header = zepto_parse_encoded_uint16( &po );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 				}
 
 				// BROADCAST-BUS-TYPE-LIST
 				// we will use it in two ways: by adding/copying to outgoing packets (if any), and practically, if we're in the list of retransmitters
-				zepto_parser_init_by_parser( &po_bustype_start, &po );
+				zepto_parser_init_by_parser_uncertain( &po_bustype_start, &po );
 
 				ZEPTO_DEBUG_PRINTF_1( "; bus-types:" );
-				uint8_t bus_type = zepto_parse_uint8( &po );
+				uint8_t bus_type = zepto_parse_uint8_uncertain( &po );
 				while ( bus_type != 0 ) // 0 is a terminator
 				{
 					ZEPTO_DEBUG_PRINTF_2( " %d,", bus_type - 1 );
-					bus_type = zepto_parse_uint8( &po );
+					bus_type = zepto_parse_uint8_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 				}
 
-				zepto_parser_init_by_parser( &po_bustype_end, &po );
+				zepto_parser_init_by_parser_uncertain( &po_bustype_end, &po );
 
 				// Multiple-Target-Addresses
 				ZEPTO_DEBUG_PRINTF_1( "; targets:" );
 				bool among_targets = false;
-				zepto_parser_init_by_parser( &po_target_start, &po );
+				zepto_parser_init_by_parser_uncertain( &po_target_start, &po );
 
-				header = zepto_parse_encoded_uint16( &po );
+				header = zepto_parse_encoded_uint16_uncertain( &po );
 				while ( header != 0 ) // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
 				{
 					uint16_t target_id = header >> 1;
 					ZEPTO_DEBUG_PRINTF_2( " %d,", target_id );
 					if ( target_id == DEVICE_SELF_ID )
 						among_targets = true;
-					header = zepto_parse_encoded_uint16( &po );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 				}
 				ZEPTO_DEBUG_PRINTF_1( ";\n" );
 
-				zepto_parser_init_by_parser( &po_target_end, &po );
+				zepto_parser_init_by_parser_uncertain( &po_target_end, &po );
 
 				// OPTIONAL-TARGET-REPLY-DELAY
 				uint16_t optional_target_reply_delay;
 				if ( explicit_time_scheduling )
-					optional_target_reply_delay = zepto_parse_encoded_uint16( &po );
+					optional_target_reply_delay = zepto_parse_encoded_uint16_uncertain( &po );
 
 				// OPTIONAL-PAYLOAD-SIZE
 				uint16_t optional_payload_size;
 				if ( more_packets_follow )
-					optional_payload_size = zepto_parse_encoded_uint16( &po );
+					optional_payload_size = zepto_parse_encoded_uint16_uncertain( &po );
 
 
 				// HEADER-CHECKSUM
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t header_reported_checksum = zepto_parse_uint8( &po );
-				header_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t header_reported_checksum = zepto_parse_uint8_uncertain( &po );
+				header_reported_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
 
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != header_reported_checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
@@ -2837,23 +2963,23 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 
 				// payload and FULL-CHECKSUM
-				zepto_parser_init_by_parser( &po_payload_start, &po );
+				zepto_parser_init_by_parser_uncertain( &po_payload_start, &po );
 
 				bool second_checksum_ok;
 				uint16_t packet_reported_checksum;
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 				bool payload_present = remaining_size > 2;
 				if ( remaining_size >= 2 )
 				{
-					parser_obj rq_start_po;
-					zepto_parser_init_by_parser( &po2, &po );
-					zepto_parser_init_by_parser( &rq_start_po, &po );
-					zepto_parse_skip_block( &po, remaining_size - 2 );
-					zepto_parser_init_by_parser( &po_payload_end, &po ); // payload end
-					zepto_append_part_of_request_to_response( mem_h, &po2, &po );
-					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
-					packet_reported_checksum = zepto_parse_uint8( &po );
-					packet_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+					parser_obj_uncertain rq_start_po;
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parser_init_by_parser_uncertain( &rq_start_po, &po );
+					zepto_parse_skip_block_uncertain( &po, remaining_size - 2 );
+					zepto_parser_init_by_parser_uncertain( &po_payload_end, &po ); // payload end
+					zepto_append_part_of_request_to_response_uncertain( mem_h, &po2, &po );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
+					packet_reported_checksum = zepto_parse_uint8_uncertain( &po );
+					packet_reported_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 					second_checksum_ok = actual_checksum == packet_reported_checksum;
 				}
 				else
@@ -2861,11 +2987,17 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					second_checksum_ok = false;
 				}
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( !second_checksum_ok )
 				{
 					//+++ TODO: we have only a partially received packet; prepare NAK
 					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_FULL_CHECKSUM_FAILED )
-					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NAK is not yet implemented\n" );
 					return SIOT_MESH_RET_PASS_TO_SEND;
 				}
 
@@ -2929,12 +3061,12 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( retransmitter_cnt )
 				{
-					parser_obj current_retr_po;
+					parser_obj_uncertain current_retr_po;
 					MEMORY_HANDLE retransmitter_list_h = acquire_memory_handle();
 					uint16_t retr_link_id;
 
-					zepto_parser_init_by_parser( &current_retr_po, &po_retransmitter_start );
-					uint16_t retr_header = zepto_parse_encoded_uint16( &current_retr_po );
+					zepto_parser_init_by_parser_uncertain( &current_retr_po, &po_retransmitter_start );
+					uint16_t retr_header = zepto_parse_encoded_uint16_uncertain( &current_retr_po );
 					retransmitter_cnt = 0;
 					while ( retr_header != 0 )
 					{
@@ -2945,17 +3077,17 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 								zepto_parser_encode_and_append_uint16( retransmitter_list_h, header );
 								retransmitter_cnt++;
 							}
-						retr_header = zepto_parse_encoded_uint16( &current_retr_po );
+						retr_header = zepto_parse_encoded_uint16_uncertain( &current_retr_po );
 					}
 					zepto_parser_encode_and_append_uint16( retransmitter_list_h, header ); // terminator
 
 					if ( retransmitter_cnt )
 					{
-						parser_obj po_block_start, po_block_end;
+						parser_obj_uncertain po_block_start, po_block_end;
 						SIOT_MESH_LINK link;
 						uint8_t idx;
 
-						retr_header = zepto_parse_encoded_uint16( &current_retr_po );
+						retr_header = zepto_parse_encoded_uint16_uncertain( &current_retr_po );
 						while ( retr_header != 0 )
 						{
 							MEMORY_HANDLE output_h = acquire_memory_handle();
@@ -2976,9 +3108,9 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							// OPTIONAL-EXTRA-HEADERS (copying)
 							if ( extra_headers_present )
 							{
-								zepto_parser_init_by_parser( &po_block_start, &po_headers_start );
-								zepto_parser_init_by_parser( &po_block_end, &po_headers_end );
-								zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+								zepto_parser_init_by_parser_uncertain( &po_block_start, &po_headers_start );
+								zepto_parser_init_by_parser_uncertain( &po_block_end, &po_headers_end );
+								zepto_append_part_of_request_to_response_uncertain( output_h, &po_block_start, &po_block_end );
 							}
 
 							// LAST-HOP
@@ -2996,14 +3128,14 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							zepto_copy_response_to_response_of_another_handle( retransmitter_list_h, output_h );
 
 							// BROADCAST-BUS-TYPE-LIST (copying)
-							zepto_parser_init_by_parser( &po_block_start, &po_bustype_start );
-							zepto_parser_init_by_parser( &po_block_end, &po_bustype_end );
-							zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+							zepto_parser_init_by_parser_uncertain( &po_block_start, &po_bustype_start );
+							zepto_parser_init_by_parser_uncertain( &po_block_end, &po_bustype_end );
+							zepto_append_part_of_request_to_response_uncertain( output_h, &po_block_start, &po_block_end );
 
 							//  Multiple-Target-Addresses (copying)
-							zepto_parser_init_by_parser( &po_block_start, &po_target_start );
-							zepto_parser_init_by_parser( &po_block_end, &po_target_end );
-							zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+							zepto_parser_init_by_parser_uncertain( &po_block_start, &po_target_start );
+							zepto_parser_init_by_parser_uncertain( &po_block_end, &po_target_end );
+							zepto_append_part_of_request_to_response_uncertain( output_h, &po_block_start, &po_block_end );
 
 							// OPTIONAL-TARGET-REPLY-DELAY
 							if ( explicit_time_scheduling )
@@ -3020,9 +3152,9 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
 
 							// PAYLOAD (copying)
-							zepto_parser_init_by_parser( &po_block_start, &po_payload_start );
-							zepto_parser_init_by_parser( &po_block_end, &po_payload_end );
-							zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+							zepto_parser_init_by_parser_uncertain( &po_block_start, &po_payload_start );
+							zepto_parser_init_by_parser_uncertain( &po_block_end, &po_payload_end );
+							zepto_append_part_of_request_to_response_uncertain( output_h, &po_block_start, &po_block_end );
 
 							// FULL-CHECKSUM
 							checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
@@ -3054,7 +3186,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 								siot_mesh_from_santa_pretask_holder_add_pretask( &pretask_holder, &pretask );
 							}
 
-							header = zepto_parse_encoded_uint16( &current_retr_po );
+							header = zepto_parse_encoded_uint16_uncertain( &current_retr_po );
 						}
 					}
 
@@ -3065,9 +3197,9 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				{
 					// other buses
 					uint16_t idx;
-					parser_obj po_block_start, po_block_end;
-					zepto_parser_init_by_parser( &po_block_start, &po_bustype_start );
-					uint8_t bus_type = zepto_parse_uint8( &po_bustype_start );
+					parser_obj_uncertain po_block_start, po_block_end;
+					zepto_parser_init_by_parser_uncertain( &po_block_start, &po_bustype_start );
+					uint8_t bus_type = zepto_parse_uint8_uncertain( &po_bustype_start );
 					bool found;
 					while ( bus_type != 0 ) // 0 is a terminator
 					{
@@ -3105,9 +3237,9 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							// OPTIONAL-EXTRA-HEADERS (copying)
 							if ( extra_headers_present )
 							{
-								zepto_parser_init_by_parser( &po_block_start, &po_headers_start );
-								zepto_parser_init_by_parser( &po_block_end, &po_headers_end );
-								zepto_append_part_of_request_to_response( output_h, &po_block_start, &po_block_end );
+								zepto_parser_init_by_parser_uncertain( &po_block_start, &po_headers_start );
+								zepto_parser_init_by_parser_uncertain( &po_block_end, &po_headers_end );
+								zepto_append_part_of_request_to_response_uncertain( output_h, &po_block_start, &po_block_end );
 							}
 
 							// LAST-HOP
@@ -3125,14 +3257,14 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							zepto_parser_encode_and_append_uint16( output_h, 0 ); // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
 
 							// BROADCAST-BUS-TYPE-LIST (copying)
-							zepto_parser_init_by_parser( &po_block_start, &po_bustype_start );
-							zepto_parser_init_by_parser( &po_block_end, &po_bustype_end );
-							zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
+							zepto_parser_init_by_parser_uncertain( &po_block_start, &po_bustype_start );
+							zepto_parser_init_by_parser_uncertain( &po_block_end, &po_bustype_end );
+							zepto_append_part_of_request_to_response_of_another_handle_uncertain( mem_h, &po_block_start, &po_block_end, output_h );
 
 							//  Multiple-Target-Addresses (copying)
-							zepto_parser_init_by_parser( &po_block_start, &po_target_start );
-							zepto_parser_init_by_parser( &po_block_end, &po_target_end );
-							zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
+							zepto_parser_init_by_parser_uncertain( &po_block_start, &po_target_start );
+							zepto_parser_init_by_parser_uncertain( &po_block_end, &po_target_end );
+							zepto_append_part_of_request_to_response_of_another_handle_uncertain( mem_h, &po_block_start, &po_block_end, output_h );
 
 							// OPTIONAL-TARGET-REPLY-DELAY
 							if ( explicit_time_scheduling )
@@ -3149,9 +3281,9 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							zepto_write_uint8( output_h, (uint8_t)(checksum>>8) );
 
 							// PAYLOAD (copying)
-							zepto_parser_init_by_parser( &po_block_start, &po_payload_start );
-							zepto_parser_init_by_parser( &po_block_end, &po_payload_end );
-							zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po_block_start, &po_block_end, output_h );
+							zepto_parser_init_by_parser_uncertain( &po_block_start, &po_payload_start );
+							zepto_parser_init_by_parser_uncertain( &po_block_end, &po_payload_end );
+							zepto_append_part_of_request_to_response_of_another_handle_uncertain( mem_h, &po_block_start, &po_block_end, output_h );
 
 							// FULL-CHECKSUM
 							checksum = zepto_parser_calculate_checksum_of_part_of_response( output_h, rsp_sz + 2, memory_object_get_response_size( output_h ) - (rsp_sz + 2), checksum );
@@ -3167,7 +3299,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						}
 						while ( 1 );
 
-						bus_type = zepto_parse_uint8( &po_bustype_start );
+						bus_type = zepto_parse_uint8_uncertain( &po_bustype_start );
 					}
 				}
 
@@ -3203,8 +3335,14 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
-					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'FROM-SANTA\' packet are not yet implemented" );
-					header = zepto_parse_encoded_uint16( &po );
+//					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'FROM-SANTA\' packet are not yet implemented" );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
+					header = zepto_parse_encoded_uint16_uncertain( &po );
 					extra_headers_present = header & 0x1;
 					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 					switch ( generic_flags )
@@ -3232,15 +3370,15 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				ZEPTO_DEBUG_ASSERT( !is_probe ); // not yet implemented
 
 				// LAST-HOP
-				uint16_t last_hop_id = zepto_parse_encoded_uint16( &po );
+				uint16_t last_hop_id = zepto_parse_encoded_uint16_uncertain( &po );
 //				ZEPTO_DEBUG_ASSERT( last_hop_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// LAST-HOP-BUS-ID
-				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po );
+				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16_uncertain( &po );
 //				ZEPTO_DEBUG_ASSERT( last_hop_bus_id == 0 ); // from ROOT as long as we have not implemented and do not expect other options
 
 				// REQUEST-ID
-				uint16_t request_id = zepto_parse_encoded_uint16( &po );
+				uint16_t request_id = zepto_parse_encoded_uint16_uncertain( &po );
 
 				ZEPTO_DEBUG_PRINTF_3( "FROM-SANTA: last_hop_id = %d, request_id = %d, bus-types: ", last_hop_id, request_id );
 
@@ -3248,20 +3386,20 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				// MULTIPLE-RETRANSMITTING-ADDRESSES 
 				// At this point we should quickly go through and to check only whether we're in the list (if we're a retransmitter), or just to skip this part, if we're a terminating device
-				header = zepto_parse_encoded_uint16( &po );
+				header = zepto_parse_encoded_uint16_uncertain( &po );
 				while ( header != 0 )
 				{
-					header = zepto_parse_encoded_uint16( &po );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
 				}
 				// TODO: at this place a full list of intended retransmitters must be retrieved
 
 				// BROADCAST-BUS-TYPE-LIST
 				// TODO: what should we add here?
-				uint8_t bus_type = zepto_parse_uint8( &po );
+				uint8_t bus_type = zepto_parse_uint8_uncertain( &po );
 				while ( bus_type != 0 ) // 0 is a terminator
 				{
 					ZEPTO_DEBUG_PRINTF_2( " %d,", bus_type - 1 );
-					bus_type = zepto_parse_uint8( &po );
+					bus_type = zepto_parse_uint8_uncertain( &po );
 				}
 
 				// Target-Addresses
@@ -3275,14 +3413,20 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				}*/
 				ZEPTO_DEBUG_PRINTF_1( "; targets:" );
 				bool among_targets = false;
-				header = zepto_parse_encoded_uint16( &po );
+				header = zepto_parse_encoded_uint16_uncertain( &po );
 				while ( header != 0 ) // terminator of the list, "EXTRA_DATA_FOLLOWS=0 and NODE-ID=0"
 				{
 					uint16_t target_id = header >> 1;
 					ZEPTO_DEBUG_PRINTF_2( " %d,", target_id );
 					if ( target_id == DEVICE_SELF_ID )
 						among_targets = true;
-					header = zepto_parse_encoded_uint16( &po );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 				}
 				ZEPTO_DEBUG_PRINTF_1( ";\n" );
 				if ( !among_targets )
@@ -3299,12 +3443,18 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				ZEPTO_DEBUG_PRINTF_2( "SIOT_MESH_FROM_SANTA_DATA_PACKET: LAST-HOP: %d\n", last_hop_id );
 
 				// HEADER-CHECKSUM
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t header_reported_checksum = zepto_parse_uint8( &po );
-				header_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t header_reported_checksum = zepto_parse_uint8_uncertain( &po );
+				header_reported_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
 
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != header_reported_checksum ) // we have not received even a header
 				{
 					// TODO: cleanup, if necessary
@@ -3314,18 +3464,18 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				bool second_checksum_ok;
 				uint16_t packet_reported_checksum;
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 				bool payload_present = remaining_size > 2;
 				if ( remaining_size >= 2 )
 				{
-					parser_obj rq_start_po;
-					zepto_parser_init_by_parser( &po2, &po );
-					zepto_parser_init_by_parser( &rq_start_po, &po );
-					zepto_parse_skip_block( &po, remaining_size - 2 );
-					zepto_append_part_of_request_to_response( mem_h, &po2, &po );
-					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
-					packet_reported_checksum = zepto_parse_uint8( &po );
-					packet_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+					parser_obj_uncertain rq_start_po;
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parser_init_by_parser_uncertain( &rq_start_po, &po );
+					zepto_parse_skip_block_uncertain( &po, remaining_size - 2 );
+					zepto_append_part_of_request_to_response_uncertain( mem_h, &po2, &po );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &rq_start_po, remaining_size - 2, actual_checksum );
+					packet_reported_checksum = zepto_parse_uint8_uncertain( &po );
+					packet_reported_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 					second_checksum_ok = actual_checksum == packet_reported_checksum;
 				}
 				else
@@ -3333,6 +3483,12 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 					second_checksum_ok = false;
 				}
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( !second_checksum_ok )
 				{
 					//+++ TODO: we have only a partially received packet; prepare NAK
@@ -3421,19 +3577,25 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				zepto_parser_encode_and_append_uint16( mem_h, output_header );
 
 				// now we're done with the header; proceeding to optional headers...
-				parser_obj po_eh_start;
-				zepto_parser_init_by_parser( &po_eh_start, &po );
+				parser_obj_uncertain po_eh_start;
+				zepto_parser_init_by_parser_uncertain( &po_eh_start, &po );
 				while ( extra_headers_present )
 				{
-					header = zepto_parse_encoded_uint16( &po );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 					extra_headers_present = header & 0x1;
 					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 					switch ( generic_flags )
 					{
 						case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
 						{
-							zepto_parse_encoded_uint16( &po ); // last_hop_bus_id; just skip
-							zepto_parse_encoded_uint8( &po ); // connection quality; just skip
+							zepto_parse_encoded_uint16_uncertain( &po ); // last_hop_bus_id; just skip
+							zepto_parse_encoded_uint8_uncertain( &po ); // connection quality; just skip
 							break;
 						}
 						case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
@@ -3450,17 +3612,17 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						}
 					}
 				}
-				zepto_append_part_of_request_to_response( mem_h, &po_eh_start, &po );
+				zepto_append_part_of_request_to_response_uncertain( mem_h, &po_eh_start, &po );
 
 				uint16_t next_hop;
 				uint16_t first_hop;
 				if ( packet_type == SIOT_MESH_FORWARD_TO_SANTA_DATA_OR_ERROR_PACKET )
 				{
 					// FIRST-HOP (reading)
-					first_hop = zepto_parse_encoded_uint16( &po );
+					first_hop = zepto_parse_encoded_uint16_uncertain( &po );
 
 					// NEXT-HOP (reading)
-					next_hop = zepto_parse_encoded_uint16( &po );
+					next_hop = zepto_parse_encoded_uint16_uncertain( &po );
 					if ( next_hop != DEVICE_SELF_ID )
 					{
 						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_NOT_FOR_THIS_DEVICE )
@@ -3502,25 +3664,31 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				zepto_parser_encode_and_append_uint16( mem_h, next_hop );
 
 				// (FORWARDED-)SOURCE-ID
-				uint16_t src_id = zepto_parse_encoded_uint16( &po );
+				uint16_t src_id = zepto_parse_encoded_uint16_uncertain( &po );
 				zepto_parser_encode_and_append_uint16( mem_h, src_id );
 
 				// (FORWARDED-)BUS-ID-AT-SOURCE
-				uint16_t bus_id_at_src = zepto_parse_encoded_uint16( &po );
+				uint16_t bus_id_at_src = zepto_parse_encoded_uint16_uncertain( &po );
 				zepto_parser_encode_and_append_uint16( mem_h, bus_id_at_src );
 
 				// REQUEST-ID
-				uint16_t request_id = zepto_parse_encoded_uint16( &po );
+				uint16_t request_id = zepto_parse_encoded_uint16_uncertain( &po );
 				zepto_parser_encode_and_append_uint16( mem_h, request_id );
 
 				// OPTIONAL-PAYLOAD-SIZE
 
 				// HEADER-CHECKSUM (checking)
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t checksum = zepto_parse_uint8( &po );
-				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 				{
 					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
@@ -3529,21 +3697,27 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
-				parser_obj po_payload_start, po_payload_end;
-				zepto_parser_init_by_parser( &po_payload_start, &po );
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				parser_obj_uncertain po_payload_start, po_payload_end;
+				zepto_parser_init_by_parser_uncertain( &po_payload_start, &po );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 				bool packet_ok = remaining_size >= 2;
 				if ( packet_ok )
 				{
-					zepto_parser_init_by_parser( &po2, &po );
-					zepto_parse_skip_block( &po, remaining_size - 2 );
-					zepto_parser_init_by_parser( &po_payload_end, &po ); // payload end
-					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
-					checksum = zepto_parse_uint8( &po );
-					checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parse_skip_block_uncertain( &po, remaining_size - 2 );
+					zepto_parser_init_by_parser_uncertain( &po_payload_end, &po ); // payload end
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+					checksum = zepto_parse_uint8_uncertain( &po );
+					checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 					packet_ok = actual_checksum == checksum;
 				}
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( !packet_ok ) // packet is broken; subject for NACK
 				{
 					//+++ TODO: we have only a partially received packet; prepare NACK
@@ -3561,7 +3735,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 
 				// PAYLOAD (writing)
-				zepto_append_part_of_request_to_response( mem_h, &po_payload_start, &po_payload_end );
+				zepto_append_part_of_request_to_response_uncertain( mem_h, &po_payload_start, &po_payload_end );
 
 				// FULL-CHECKSUM (writing)
 				checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
@@ -3600,19 +3774,25 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				zepto_parser_encode_and_append_uint16( mem_h, output_header );
 
 				// now we're done with the header; proceeding to optional headers...
-				parser_obj po_eh_start;
-				zepto_parser_init_by_parser( &po_eh_start, &po );
+				parser_obj_uncertain po_eh_start;
+				zepto_parser_init_by_parser_uncertain( &po_eh_start, &po );
 				while ( extra_headers_present )
 				{
-					header = zepto_parse_encoded_uint16( &po );
+					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						return SIOT_MESH_RET_GARBAGE_RECEIVED;
+					}
 					extra_headers_present = header & 0x1;
 					uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 					switch ( generic_flags )
 					{
 						case SIOT_MESH_TOSANTA_EXTRA_HEADER_LAST_INCOMING_HOP:
 						{
-							zepto_parse_encoded_uint16( &po ); // last_hop_bus_id; just skip
-							zepto_parse_encoded_uint8( &po ); // connection quality; just skip
+							zepto_parse_encoded_uint16_uncertain( &po ); // last_hop_bus_id; just skip
+							zepto_parse_encoded_uint8_uncertain( &po ); // connection quality; just skip
 							break;
 						}
 						case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
@@ -3629,22 +3809,28 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						}
 					}
 				}
-				zepto_append_part_of_request_to_response( mem_h, &po_eh_start, &po );
+				zepto_append_part_of_request_to_response_uncertain( mem_h, &po_eh_start, &po );
 
 				// ERROR-CODE (copying)
-				uint16_t last_hop = zepto_parse_encoded_uint16( &po );
+				uint16_t last_hop = zepto_parse_encoded_uint16_uncertain( &po );
 				zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
 
 				// ERROR-CODE (copying)
-				uint16_t error_code = zepto_parse_encoded_uint16( &po );
+				uint16_t error_code = zepto_parse_encoded_uint16_uncertain( &po );
 				zepto_parser_encode_and_append_uint16( mem_h, error_code );
 
 				// HEADER-CHECKSUM (checking)
-				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-				uint16_t checksum = zepto_parse_uint8( &po );
-				checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-				zepto_parser_init_by_parser( &po1, &po );
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
 				{
 					ZEPTO_DEBUG_PRINTF_1( "Totally broken packet received; dropped\n" );
@@ -3653,22 +3839,28 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 					return SIOT_MESH_RET_GARBAGE_RECEIVED;
 				}
 
-				parser_obj po_payload_start, po_payload_end;
-				zepto_parser_init_by_parser( &po_payload_start, &po );
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+				parser_obj_uncertain po_payload_start, po_payload_end;
+				zepto_parser_init_by_parser_uncertain( &po_payload_start, &po );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 				bool packet_ok = remaining_size >= 2;
 				uint16_t reported_checksum;
 				if ( packet_ok )
 				{
-					zepto_parser_init_by_parser( &po2, &po );
-					zepto_parse_skip_block( &po, remaining_size - 2 );
-					zepto_parser_init_by_parser( &po_payload_end, &po ); // payload end
-					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
-					reported_checksum = zepto_parse_uint8( &po );
-					reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parse_skip_block_uncertain( &po, remaining_size - 2 );
+					zepto_parser_init_by_parser_uncertain( &po_payload_end, &po ); // payload end
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+					reported_checksum = zepto_parse_uint8_uncertain( &po );
+					reported_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 					packet_ok = actual_checksum == reported_checksum;
 				}
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					return SIOT_MESH_RET_GARBAGE_RECEIVED;
+				}
 				if ( !packet_ok ) // packet is broken; subject for NACK
 				{
 					//+++ TODO: we have only a partially received packet; prepare NACK
@@ -3686,7 +3878,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
 
 				// PAYLOAD (writing)
-				zepto_append_part_of_request_to_response( mem_h, &po_payload_start, &po_payload_end );
+				zepto_append_part_of_request_to_response_uncertain( mem_h, &po_payload_start, &po_payload_end );
 
 				// FULL-CHECKSUM (writing)
 				checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
@@ -3762,7 +3954,19 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 		// now we're done with the header; proceeding to optional headers...
 		while ( extra_headers_present )
 		{
-			header = zepto_parse_encoded_uint16( &po );
+			header = zepto_parse_encoded_uint16_uncertain( &po );
+			if ( ! zepto_parser_is_result_valid( &po ) )
+			{
+				// TODO: cleanup, if necessary
+				SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+				return SIOT_MESH_RET_GARBAGE_RECEIVED;
+			}
+			if ( ! zepto_parser_is_result_valid( &po ) )
+			{
+				// TODO: cleanup, if necessary
+				SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+				return SIOT_MESH_RET_GARBAGE_RECEIVED;
+			}
 			extra_headers_present = header & 0x1;
 			uint8_t generic_flags = (header >> 1) & 0x3; // bits[1,2]
 			switch ( generic_flags )
@@ -3779,15 +3983,15 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 		}
 
 		// NEXT-HOP
-		uint16_t next_hop = zepto_parse_encoded_uint16( &po );
+		uint16_t next_hop = zepto_parse_encoded_uint16_uncertain( &po );
 
 		// LAST-HOP
-		uint16_t last_hop = zepto_parse_encoded_uint16( &po );
+		uint16_t last_hop = zepto_parse_encoded_uint16_uncertain( &po );
 
 		// Non-Root-Address
 		// we implement quick coding assuming no extra data follow
 		// TODO: full implementation with VIA fields, etc
-		uint16_t non_root_addr = zepto_parse_encoded_uint16( &po );
+		uint16_t non_root_addr = zepto_parse_encoded_uint16_uncertain( &po );
 		ZEPTO_DEBUG_ASSERT( (non_root_addr & 1) == 0 ); // TODO: provide full implementation
 		non_root_addr >>= 1;
 		uint16_t target_id = is_from_root ? non_root_addr : 0;
@@ -3805,11 +4009,23 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 		// OPTIONAL-PAYLOAD-SIZE
 
 		// HEADER-CHECKSUM
-		uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes( &po ), 0 );
-		uint16_t header_checksum = zepto_parse_uint8( &po );
-		header_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
-		zepto_parser_init_by_parser( &po1, &po );
+		uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+		uint16_t header_checksum = zepto_parse_uint8_uncertain( &po );
+		header_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+		zepto_parser_init_by_parser_uncertain( &po1, &po );
 
+		if ( ! zepto_parser_is_result_valid( &po ) )
+		{
+			// TODO: cleanup, if necessary
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
+		}
+		if ( ! zepto_parser_is_result_valid( &po ) )
+		{
+			// TODO: cleanup, if necessary
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
+		}
 		if ( actual_checksum != header_checksum ) // we have not received even a header -- total garbage received
 		{
 			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
@@ -3818,20 +4034,32 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 		// now we have a packet that is at least, partially, received; further processing depends on the level of its integrity
 
-		uint16_t remaining_size = zepto_parsing_remaining_bytes( &po );
+		uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
 		bool packet_is_integral = remaining_size >= 2;
 		uint16_t packet_reported_checksum;
 
+		if ( ! zepto_parser_is_result_valid( &po ) )
+		{
+			// TODO: cleanup, if necessary
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
+		}
 		if ( packet_is_integral )
 		{
-			zepto_parser_init_by_parser( &po2, &po );
-			zepto_parse_skip_block( &po, remaining_size - 2 );
-			actual_checksum = zepto_parser_calculate_checksum_of_part_of_request( mem_h, &po2, remaining_size - 2, actual_checksum );
-			packet_reported_checksum = zepto_parse_uint8( &po );
-			packet_reported_checksum |= ((uint16_t)zepto_parse_uint8( &po )) << 8;
+			zepto_parser_init_by_parser_uncertain( &po2, &po );
+			zepto_parse_skip_block_uncertain( &po, remaining_size - 2 );
+			actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+			packet_reported_checksum = zepto_parse_uint8_uncertain( &po );
+			packet_reported_checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
 			packet_is_integral = actual_checksum == packet_reported_checksum;
 		}
 
+		if ( ! zepto_parser_is_result_valid( &po ) )
+		{
+			// TODO: cleanup, if necessary
+			SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+			return SIOT_MESH_RET_GARBAGE_RECEIVED;
+		}
 		if ( !packet_is_integral )
 		{
 			//+++ TODO: we have only a partially received packet; prepare NACK
@@ -3854,13 +4082,19 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 					return SIOT_MESH_RET_NOT_FOR_THIS_DEV_RECEIVED;
 				}
 
-				uint16_t remaining_size = zepto_parsing_remaining_bytes( &po2 );
-				zepto_parser_init_by_parser( &po1, &po2 );
-				zepto_parse_skip_block( &po1, remaining_size - 2 );
-				zepto_convert_part_of_request_to_response( mem_h, &po2, &po1 );
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po2 );
+				zepto_parser_init_by_parser_uncertain( &po1, &po2 );
+				zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
+				zepto_convert_part_of_request_to_response_uncertain( mem_h, &po2, &po1 );
 
 				if ( ack_requested )
 				{
+static uint16_t ctr_uni = 0;
+ctr_uni++;
+if ( ctr_uni == 93 )
+{
+ZEPTO_DEBUG_PRINTF_2( "ctr_uni = %d\n", ctr_uni );
+}
 					zepto_parser_free_memory( mem_ack_h );
 					uint8_t ret_code = siot_mesh_get_bus_id_for_target( last_hop, ack_bus_id );
 					if ( ret_code == SIOT_MESH_RET_OK )
@@ -3898,7 +4132,7 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				uint16_t packet_checksum;
 				if ( ttl == 0  ) // cannot forward it further; an error must be reported
 				{
-					ZEPTO_DEBUG_ASSERT( 0 == "reporting errors in case TTL == 0 is not yet implemented" );
+					ZEPTO_DEBUG_PRINTF_1( "reporting errors in case TTL == 0 is not yet implemented" );
 					return SIOT_MESH_RET_OK;
 				}
 
@@ -3992,10 +4226,10 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 			}
 #else // USED_AS_RETRANSMITTER
 			// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
-			uint16_t remaining_size = zepto_parsing_remaining_bytes( &po2 );
-			zepto_parser_init_by_parser( &po1, &po2 );
-			zepto_parse_skip_block( &po1, remaining_size - 2 );
-			zepto_convert_part_of_request_to_response( mem_h, &po2, &po1 );
+			uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po2 );
+			zepto_parser_init_by_parser_uncertain( &po1, &po2 );
+			zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
+			zepto_convert_part_of_request_to_response_uncertain( mem_h, &po2, &po1 );
 
 			if ( ack_requested )
 			{
@@ -4374,6 +4608,9 @@ uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8
 
 void handler_siot_process_route_update_request( parser_obj* po, MEMORY_HANDLE reply )
 {
+static uint16_t ctr;
+ctr++;
+ZEPTO_DEBUG_PRINTF_2( "*** ctr-route-update = %d ***\n", ctr );
 	uint8_t ret_code;
 	uint16_t flags = zepto_parse_encoded_uint16( po );
 	// TODO: use bit field processing where applicable
