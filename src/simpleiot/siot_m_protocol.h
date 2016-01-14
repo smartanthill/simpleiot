@@ -141,11 +141,15 @@ extern "C" {
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_INTERM 8
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL 9
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA 10
+#define SIOT_MESH_AT_ROOT_RET_INVALID_PARAM 11
 
 
 void siot_mesh_at_root_init( sa_time_val* currt );
 uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitter, uint8_t* bus_types, uint16_t bus_type_cnt );
 uint8_t siot_mesh_at_root_remove_device( uint16_t device_id );
+
+uint8_t siot_mesh_at_root_sanitize_device_id( uint16_t device_id );
+uint8_t siot_mesh_at_root_sanitize_non_root_device_id( uint16_t device_id );
 
 
 uint8_t write_bus_types_for_device_for_from_santa_packet( MEMORY_HANDLE mem_h, uint16_t device_id );
@@ -154,7 +158,7 @@ uint16_t write_retransmitter_list_for_from_santa_packet( MEMORY_HANDLE mem_h );
 uint8_t siot_mesh_at_root_target_to_link_id( uint16_t target_id, uint16_t* link_id );
 uint8_t siot_mesh_get_link( uint16_t link_id, SIOT_MESH_LINK* link );
 void siot_mesh_at_root_remove_link_to_target_no_ack_from_immediate_hop( uint16_t target_id, uint16_t next_hop_id ); // generates route table updates
-void siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id, uint16_t failed_target_id, uint8_t from_root );
+uint8_t siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t reporting_id, uint16_t failed_hop_id, uint16_t failed_target_id, uint8_t from_root );
 
 void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t target_id );
 void siot_mesh_at_root_check_routes_to_retransmitters( const sa_time_val* currt, sa_time_val* time_to_next_event );

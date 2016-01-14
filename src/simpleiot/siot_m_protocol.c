@@ -1779,7 +1779,11 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 
 				// Target-Address
 				header = zepto_parse_encoded_uint16_uncertain( &po );
-				ZEPTO_DEBUG_ASSERT( (header & 1) == 0 ); // we have not yet implemented extra data
+				if ( (header & 1) != 0 )
+				{
+					// we have not yet implemented extra data
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
 				uint16_t target_id = header >> 1;
 				if ( target_id != 0 )
 				{
@@ -1947,7 +1951,10 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					else
 					{
 						// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
-						return siot_mesh_process_received_tosanta_or_forwardtosanta_packet( currt, mem_h, *src_id, bus_id_at_src, first_hop, conn_quality, remaining_size > 2, request_id );
+						if ( siot_mesh_at_root_sanitize_non_root_device_id( *src_id ) == SIOT_MESH_AT_ROOT_RET_OK )
+							return siot_mesh_process_received_tosanta_or_forwardtosanta_packet( currt, mem_h, *src_id, bus_id_at_src, first_hop, conn_quality, remaining_size > 2, request_id );
+						else
+							{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 					}
 				}
 				else // packet is broken; subject for NAK
@@ -2158,19 +2165,24 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 			}
 			else
 			{
-				// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
-				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po2 );
-				zepto_parser_init_by_parser_uncertain( &po1, &po2 );
-				zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
-				zepto_convert_part_of_request_to_response_uncertain( mem_h, &po2, &po1 );
-
-				if ( ack_requested )
+				if ( siot_mesh_at_root_sanitize_non_root_device_id( *src_id ) == SIOT_MESH_AT_ROOT_RET_OK )
 				{
-					zepto_parser_free_memory( mem_ack_h );
-					siot_mesh_form_ack_packet( mem_ack_h, last_hop, error_cnt, packet_reported_checksum );
-					return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
+					// Note: don't be surprized by implementation of call below: we cannot add data until all checks are done; here we check, and there we add
+					uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po2 );
+					zepto_parser_init_by_parser_uncertain( &po1, &po2 );
+					zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
+					zepto_convert_part_of_request_to_response_uncertain( mem_h, &po2, &po1 );
+
+					if ( ack_requested )
+					{
+						zepto_parser_free_memory( mem_ack_h );
+						siot_mesh_form_ack_packet( mem_ack_h, last_hop, error_cnt, packet_reported_checksum );
+						return SIOT_MESH_RET_SEND_ACK_AND_PASS_TO_PROCESS;
+					}
+					return SIOT_MESH_RET_PASS_TO_PROCESS;
 				}
-				return SIOT_MESH_RET_PASS_TO_PROCESS;
+				else
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 			}
 		}
 		else // packet is broken; subject for NAK
