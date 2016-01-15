@@ -3625,12 +3625,14 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
 						case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
 						{
-							ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+//							ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+							{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 							break;
 						}
 						default:
 						{
-							ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected type of optional header\n" );
+//							ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected type of optional header\n" );
+							{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 							break;
 						}
 					}
@@ -3663,6 +3665,12 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				// FIRST-HOP (writing)
 				zepto_parser_encode_and_append_uint16( mem_h, first_hop );
 
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
 				// NEXT-HOP (updating and writing)
 				uint16_t link_id;
 				uint8_t ret_code = siot_mesh_target_to_link_id( 0, &link_id ); // root is a target
@@ -3822,12 +3830,14 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 						case SIOT_MESH_GENERIC_EXTRA_HEADER_COLLISION_DOMAIN:
 						case SIOT_MESH_UNICAST_EXTRA_HEADER_LOOP_ACK:
 						{
-							ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+//							ZEPTO_DEBUG_ASSERT( NULL == "Error: other optional headers are not implemented\n" );
+							{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 							break;
 						}
 						default:
 						{
-							ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected type of optional header\n" );
+//							ZEPTO_DEBUG_ASSERT( NULL == "Error: unexpected type of optional header\n" );
+							{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 							break;
 						}
 					}
