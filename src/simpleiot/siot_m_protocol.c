@@ -1765,12 +1765,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
-//					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
-					if ( ! zepto_parser_is_result_valid( &po ) )
-					{
-						// TODO: cleanup, if necessary
-						{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
-					}
+					ZEPTO_DEBUG_PRINTF_1( "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 				}
 
 				// LAST-HOP
@@ -1981,12 +1977,8 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
-					if ( ! zepto_parser_is_result_valid( &po ) )
-					{
-						// TODO: cleanup, if necessary
-						{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
-					}
-					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					ZEPTO_DEBUG_PRINTF_1( "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 				}
 
 				// ERROR-CODE
@@ -2707,13 +2699,9 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				// now we're done with the header; proceeding to optional headers...
 				while ( extra_headers_present )
 				{
-					if ( ! zepto_parser_is_result_valid( &po ) )
-					{
-						// TODO: cleanup, if necessary
-						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
-						{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
-					}
-//					ZEPTO_DEBUG_ASSERT( 0 == "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					ZEPTO_DEBUG_PRINTF_1( "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 				}
 
 				// LAST-HOP
@@ -3412,6 +3400,12 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				while ( header != 0 )
 				{
 					header = zepto_parse_encoded_uint16_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+					}
 				}
 				// TODO: at this place a full list of intended retransmitters must be retrieved
 
@@ -3422,6 +3416,12 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 				{
 					ZEPTO_DEBUG_PRINTF_2( " %d,", bus_type - 1 );
 					bus_type = zepto_parse_uint8_uncertain( &po );
+					if ( ! zepto_parser_is_result_valid( &po ) )
+					{
+						// TODO: cleanup, if necessary
+						SIOUT_INCREMENT_CTR_PER_BUS( *bus_id, SIOT_STATS_CTR_PACKET_HEADER_CHECKSUM_FAILED )
+						{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+					}
 				}
 
 				// Target-Addresses

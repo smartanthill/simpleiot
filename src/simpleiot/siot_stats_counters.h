@@ -42,6 +42,7 @@ extern uint32_t siot_stats_counters_32[ SIOT_STATS_CTR_32_MAX ];
 
 // Operating with global counters
 #define SIOUT_INCREMENT_CTR( ctr ) (siot_stats_counters_16[ctr])++;
+//#define SIOUT_INCREMENT_CTR( ctr )
 
 // Bus-specific counters - 16
 #define SIOT_STATS_CTR_PACKET_RECEIVED 0
@@ -56,6 +57,7 @@ extern uint16_t* siot_stats_counters_bus_specific_16;
 
 // Operating with bus-specific counters
 #define SIOUT_INCREMENT_CTR_PER_BUS( bus, ctr ) {ZEPTO_DEBUG_ASSERT( bus < hal_get_bus_count() ); (siot_stats_counters_bus_specific_16[ (bus) * SIOT_STATS_CTR_BUS_SPECIFIC_16_MAX + (ctr) ])++;}
+//#define SIOUT_INCREMENT_CTR_PER_BUS( bus, ctr )
 
 
 // initializing and reporting
