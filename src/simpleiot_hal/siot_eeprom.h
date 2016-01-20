@@ -20,18 +20,8 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include <simpleiot/siot_common.h>
 
+#define EEPROM_CHECKSUM_SIZE 4
 
-#ifdef USED_AS_MASTER
-
-// data IDs (for communication with eeprom
-#define EEPROM_SLOT_DATA_SASP_NONCE_LW_ID 8 // Nonce Lower Watermark
-#define EEPROM_SLOT_DATA_SASP_NONCE_LS_ID 9 // Nonce to use For Sending
-
-// calls
-void eeprom_write( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data );
-void eeprom_read( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data );
-
-#else // USED_AS_MASTER
 
 // data IDs (for communication with eeprom
 #define EEPROM_SLOT_DATA_SASP_NONCE_LW_ID 0 // Nonce Lower Watermark
@@ -44,6 +34,24 @@ void eeprom_read( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data )
 
 #define EEPROM_SLOT_MAX 2
 // ...to be continued
+
+#ifdef USED_AS_MASTER
+
+#define PERM_STORAGE_MIN_SIZE (DATA_SASP_NONCE_LW_SIZE + DATA_SASP_NONCE_LS_SIZE + 2 * EEPROM_CHECKSUM_SIZE)
+
+// ret codes
+#define PERM_STORAGE_RET_OK 0
+#define PERM_STORAGE_RET_ALREADY_EXISTS 1
+#define PERM_STORAGE_RET_DOES_NOT_EXIST 2
+#define PERM_STORAGE_RET_OUT_OF_MEM 10
+
+// calls
+uint8_t perm_storage_add_device( uint16_t device_id );
+uint8_t perm_storage_remove_device( uint16_t device_id );
+void eeprom_write( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data );
+void eeprom_read( uint16_t device_id, uint8_t item, uint16_t sz, uint8_t* data );
+
+#else // USED_AS_MASTER
 
 #define EEPROM_SERIALIZED_SIZE ( 2 + DATA_REINCARNATION_ID_SIZE + 2 * EEPROM_SLOT_MAX + DATA_SASP_NONCE_LW_SIZE + DATA_SASP_NONCE_LS_SIZE )
 
