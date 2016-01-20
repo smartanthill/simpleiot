@@ -142,10 +142,11 @@ extern "C" {
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FINAL 9
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA 10
 #define SIOT_MESH_AT_ROOT_RET_INVALID_PARAM 11
+#define SIOT_MESH_AT_ROOT_RET_IGNORED 12
 
 
 void siot_mesh_at_root_init( sa_time_val* currt );
-uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitter, uint8_t* bus_types, uint16_t bus_type_cnt );
+uint8_t siot_mesh_at_root_add_device( uint16_t device_id, uint8_t is_retransmitter, uint16_t bus_id_max, uint8_t* bus_types, uint16_t bus_type_cnt );
 uint8_t siot_mesh_at_root_remove_device( uint16_t device_id );
 
 uint8_t siot_mesh_at_root_sanitize_device_id( uint16_t device_id );
@@ -163,8 +164,8 @@ uint8_t siot_mesh_at_root_remove_link_to_target_route_error_reported( uint16_t r
 void siot_mesh_form_packets_from_santa_and_add_to_task_list( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t target_id );
 void siot_mesh_at_root_check_routes_to_retransmitters( const sa_time_val* currt, sa_time_val* time_to_next_event );
 
-void siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
-void siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
+uint8_t siot_mesh_at_root_add_last_hop_in_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t last_hop_id, uint16_t last_hop_bus_id, uint8_t conn_q );
+uint8_t siot_mesh_at_root_add_last_hop_out_data( const sa_time_val* currt, uint16_t request_id, uint16_t src_id, uint16_t bus_id_at_src, uint16_t first_receiver_id, uint8_t conn_q );
 #ifdef SIOT_MESH_BTLE_MODE
 void siot_mesh_at_root_add_connection_request_data( const sa_time_val* currt, uint16_t requester_id, uint16_t slave_id, uint16_t request_id, uint8_t urgent, uint8_t signal_strength, uint16_t delay, int16_t delay_unit );
 uint8_t siot_mesh_at_root_form_allow_to_connect_packet( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t* device_id );

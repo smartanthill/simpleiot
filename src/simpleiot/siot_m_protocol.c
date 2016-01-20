@@ -1499,7 +1499,8 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( const sa_ti
 	bool extra_headers_present = ( header >> 4 ) & 0x1;
 	uint16_t TTL = header >> 5;
 	// now we're done with the header; proceeding to optional headers...
-	while ( extra_headers_present )
+	bool not_corrupted = true;
+	while ( not_corrupted && extra_headers_present )
 	{
 		header = zepto_parse_encoded_uint16( &po );
 		extra_headers_present = header & 0x1;
@@ -1511,7 +1512,9 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( const sa_ti
 				uint16_t last_hop_id = header >> 4;
 				uint16_t last_hop_bus_id = zepto_parse_encoded_uint16( &po ); 
 				uint8_t conn_q = zepto_parse_encoded_uint8( &po );
-				siot_mesh_at_root_add_last_hop_in_data( currt, request_id, src_id, last_hop_id, last_hop_bus_id, conn_q ); 
+				uint8_t ret1 = siot_mesh_at_root_add_last_hop_in_data( currt, request_id, src_id, last_hop_id, last_hop_bus_id, conn_q ); 
+				if ( ret1 != SIOT_MESH_AT_ROOT_RET_OK )
+					not_corrupted = false;
 				break;
 			}
 			case SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS:
@@ -1567,7 +1570,8 @@ uint8_t siot_mesh_process_received_tosanta_or_forwardtosanta_packet( const sa_ti
 #endif // SA_DEBUG
 
 
-	siot_mesh_at_root_add_last_hop_out_data( currt, request_id, src_id, bus_id_at_src, first_hop, conn_quality_at_first_receiver );
+	if ( not_corrupted )
+		siot_mesh_at_root_add_last_hop_out_data( currt, request_id, src_id, bus_id_at_src, first_hop, conn_quality_at_first_receiver );
 
 	// OPTIONAL-PAYLOAD-SIZE
 
