@@ -3107,11 +3107,23 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 							MEMORY_HANDLE output_h = acquire_memory_handle();
 
 							uint16_t retr_id = retr_header >> 1;
-							ZEPTO_DEBUG_ASSERT( retr_id != DEVICE_SELF_ID );
+							if ( retr_id == DEVICE_SELF_ID ) // potentially broken part
+							{
+								release_memory_handle( output_h );
+								continue;
+							}
 							uint8_t ret_code = siot_mesh_target_to_link_id( retr_id, &retr_link_id );
-							ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK );
+							if ( ret_code != SIOT_MESH_RET_OK )
+							{
+								release_memory_handle( output_h );
+								continue;
+							}
 							ret_code = siot_mesh_get_link( retr_link_id, &link );
-							ZEPTO_DEBUG_ASSERT( ret_code == SIOT_MESH_RET_OK );
+							if ( ret_code != SIOT_MESH_RET_OK )
+							{
+								release_memory_handle( output_h );
+								continue;
+							}
 
 							// THIS IS ONE OF RETRANSMITTERS WE HAVE A ROUTE TO; PREPARE A PACKET
 
@@ -4782,6 +4794,198 @@ validate_tables();
 print_tables();
 validate_tables();
 }
+
+#ifdef SIOT_MESH_BTLE_MODE
+#ifdef USED_AS_RETRANSMITTER
+
+#define SIOT_MESH_BTLE_CONN_TABLE_SIZE_MAX 8
+typedef struct _SIOT_MESH_BTLE_CONN_HANDLE_TABLE
+{
+	uint16_t TARGET_ID;
+	uint16_t bus_id;
+	uint16_t conn_handle;
+} SIOT_MESH_BTLE_CONN_HANDLE_TABLE;
+static SIOT_MESH_BTLE_CONN_HANDLE_TABLE siot_mesh_btle_conn_handle_table[ SIOT_MESH_BTLE_CONN_TABLE_SIZE_MAX ];
+uint16_t siot_mesh_btle_dev_count;
+
+void siot_mesh_btle_init_data()
+{
+	siot_mesh_btle_dev_count = 0;
+}
+
+uint8_t siot_mesh_btle_handle_to_device_id( uint16_t bus_id, uint16_t conn_handle, uint16_t* device_id )
+{
+	uint16_t i;
+	for ( i=0; i<siot_mesh_btle_dev_count; i++ )
+		if ( siot_mesh_btle_conn_handle_table[i].bus_id == bus_id && siot_mesh_btle_conn_handle_table[i].conn_handle == conn_handle )
+		{
+			*device_id = siot_mesh_btle_conn_handle_table[i].TARGET_ID;
+			return SIOT_MESH_RET_OK;
+		}
+	return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
+uint8_t siot_mesh_btle_handle_add_device_info( uint16_t bus_id, uint16_t conn_handle, uint16_t device_id )
+{
+	uint16_t i;
+	if ( siot_mesh_btle_dev_count == SIOT_MESH_BTLE_CONN_TABLE_SIZE_MAX )
+		return SIOT_MESH_RET_ERROR_OUT_OF_RANGE;
+	for ( i=0; i<siot_mesh_btle_dev_count; i++ )
+		if ( siot_mesh_btle_conn_handle_table[i].TARGET_ID == device_id )
+			return SIOT_MESH_RET_ERROR_ALREADY_EXISTS;
+	
+	siot_mesh_btle_conn_handle_table[siot_mesh_btle_dev_count].TARGET_ID = device_id;
+	siot_mesh_btle_conn_handle_table[siot_mesh_btle_dev_count].bus_id = bus_id;
+	siot_mesh_btle_conn_handle_table[siot_mesh_btle_dev_count].conn_handle = conn_handle;
+	siot_mesh_btle_dev_count++;
+	return SIOT_MESH_RET_OK;
+}
+
+uint8_t siot_mesh_btle_handle_remove_device_info_by_conn_handle( uint16_t bus_id, uint16_t conn_handle, uint16_t* device_id )
+{
+	uint16_t i;
+	if ( siot_mesh_btle_dev_count == 0 )
+		return SIOT_MESH_RET_ERROR_NOT_FOUND;
+	for ( i=0; i<siot_mesh_btle_dev_count; i++ )
+		if ( siot_mesh_btle_conn_handle_table[i].bus_id == bus_id && siot_mesh_btle_conn_handle_table[i].conn_handle == conn_handle )
+		{
+			*device_id = siot_mesh_btle_conn_handle_table[i].TARGET_ID;
+			ZEPTO_MEMMOV( siot_mesh_btle_conn_handle_table + i, siot_mesh_btle_conn_handle_table + i + 1, sizeof (SIOT_MESH_BTLE_CONN_HANDLE_TABLE) );
+			siot_mesh_btle_dev_count--;
+			return SIOT_MESH_RET_OK;
+		}
+	
+	return SIOT_MESH_RET_ERROR_NOT_FOUND;
+}
+
+uint8_t handler_siot_mesh_on_connection_request( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id, uint16_t conn_handle )
+{
+	// TODO: extract device_id and other data; 
+	// [?] should we keep it in the list of devices requesting connection
+	// results in connection_request_notification sent to ROOT
+
+	// NOTE: we implement a simplified model when no data is stored and all notifications are done immediately, if possible, or not done at all
+	// TODO: think about extended approach: if no route/connection is available toward the ROOT, data of each request is kept for a while, and is sent to the ROOT as soon as connection is established
+
+	// declarations
+	SIOT_MESH_LINK link;
+	parser_obj po;
+
+	// 1. make sure we have a route to root
+	uint8_t ret_code = siot_mesh_get_link_to_root( &link );
+	if ( ret_code != SIOT_MESH_RET_OK )
+		return SIOT_MESH_RET_OK;
+
+	// 2. Read connection request data
+	// see handler_siot_mesh_get_advert_data() for details
+	zepto_parser_init( &po, mem_h );
+	uint8_t tmp = zepto_parse_uint8( &po );
+	uint16_t requester_id = zepto_parse_uint8( &po );
+	requester_id <<= 8;
+	requester_id += tmp;
+
+	// 3. form and send connection request notification
+	// Connection Request Notification Packet structure: | SAMP-CONNECTION-REQUEST-NOTIFICATION-AND-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | BUS-ID-AT-SOURCE | REQUESTER-ID | HEADER-CHECKSUM | FULL-CHECKSUM |
+	ZEPTO_DEBUG_PRINTF_3( "Forming connection_request_notification packet, requester_id = %d, bus_id = %d\n", requester_id, *bus_id );
+
+	// SAMP-CONNECTION-REQUEST-NOTIFICATION-AND-TTL: bit[0]=1, bits[1..3] = CONNECTION_REQUEST_NOTIFICATION, bit[4] = EXTRA-HEADERS-PRESENT, and bits [5..] TTL
+	uint16_t header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 0 << 4 ) | ( SIOT_MESH_TTL_MAX << 5 ); // no extra headers, TTL = SIOT_MESH_TTL_MAX
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+
+	// SOURCE-ID
+	zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
+
+	// BUS-ID-AT-SOURCE
+	zepto_parser_encode_and_append_uint16( mem_h, *bus_id );
+
+	// REQUESTER-ID
+	zepto_parser_encode_and_append_uint16( mem_h, requester_id );
+
+	// HEADER-CHECKSUM
+	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
+	uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, 0, rsp_sz, 0 );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+
+	// FULL-CHECKSUM
+	checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+
+	// 4. form sending instructions
+	*bus_id = link.BUS_ID;
+	// TODO: potentially we need to deliver a connection handle (if upstream is also BTLE)
+	return SIOT_MESH_RET_PASS_TO_SEND;
+}
+
+uint8_t handler_siot_mesh_on_connection_with_slave_lost( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id, uint16_t conn_handle )
+{
+	// 2. make sure we have a route to root
+	SIOT_MESH_LINK link;
+	uint8_t ret_code = siot_mesh_get_link_to_root( &link );
+	if ( ret_code != SIOT_MESH_RET_OK )
+		return SIOT_MESH_RET_OK;
+
+	// 1. find out which device is lost and remove it from the list
+	uint16_t device_id;
+	ret_code = siot_mesh_btle_handle_remove_device_info_by_conn_handle( *bus_id, conn_handle, &device_id );
+	if ( ret_code != SIOT_MESH_RET_OK )
+		return SIOT_MESH_RET_OK; // do nothing
+
+	// 3. form a notification packet
+	// Connection Request Notification Packet structure: | SAMP-CONNECTION-REQUEST-NOTIFICATION-AND-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | DEVICE-ID | HEADER-CHECKSUM | FULL-CHECKSUM |
+	ZEPTO_DEBUG_PRINTF_4( "Forming connection_lost_notification packet, requester_id = %d, bus_id = %d, handle_id = %d\n", device_id, *bus_id, conn_handle );
+
+	// SAMP-CONNECTION-LOST-NOTIFICATION-AND-TTL: bit[0]=1, bits[1..3] = CONNECTION_LOST_NOTIFICATION, bit[4] = EXTRA-HEADERS-PRESENT, and bits [5..] TTL
+	uint16_t header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 0 << 4 ) | ( SIOT_MESH_TTL_MAX << 5 ); // no extra headers, TTL = SIOT_MESH_TTL_MAX
+	zepto_parser_encode_and_append_uint16( mem_h, header );
+
+	// SOURCE-ID
+	zepto_parser_encode_and_append_uint16( mem_h, DEVICE_SELF_ID );
+
+	// DEVICE-ID
+	zepto_parser_encode_and_append_uint16( mem_h, device_id );
+
+	// HEADER-CHECKSUM
+	uint16_t rsp_sz = memory_object_get_response_size( mem_h );
+	uint16_t checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, 0, rsp_sz, 0 );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+
+	// FULL-CHECKSUM
+	checksum = zepto_parser_calculate_checksum_of_part_of_response( mem_h, rsp_sz + 2, memory_object_get_response_size( mem_h ) - (rsp_sz + 2), checksum );
+	zepto_write_uint8( mem_h, (uint8_t)checksum );
+	zepto_write_uint8( mem_h, (uint8_t)(checksum>>8) );
+
+	// 4. form sending instructions
+	*bus_id = link.BUS_ID;
+	// TODO: potentially we need to deliver a connection handle (if upstream is also BTLE)
+	return SIOT_MESH_RET_PASS_TO_SEND;
+}
+
+#endif // USED_AS_RETRANSMITTER
+
+uint8_t handler_siot_mesh_on_connection_lost( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id, uint16_t conn_handle )
+{
+	// TODO: results in editing internal data and starting advertizing; anything else?
+	return SIOT_MESH_RET_OK;
+}
+
+uint8_t handler_siot_mesh_on_connection_request_acceptance( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id, uint16_t conn_handle )
+{
+	// TODO: extract device_id and other data; keep it; anything else?
+	return SIOT_MESH_RET_OK;
+}
+
+uint8_t handler_siot_mesh_get_advert_data( MEMORY_HANDLE mem_h )
+{
+	// TODO: load device_d, etc; note that the available size is quite limited!
+	zepto_write_uint8( mem_h, (uint8_t)DEVICE_SELF_ID );
+	zepto_write_uint8( mem_h, (uint8_t)(DEVICE_SELF_ID>>8) );
+	return SIOT_MESH_RET_OK;
+}
+
+#endif // SIOT_MESH_BTLE_MODE
 
 #endif // USED_AS_MASTER
 

@@ -24,7 +24,7 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <hal_time_provider.h>
 #include "../simpleiot_hal/hal_waiting.h"
 
-//#define SIOT_MESH_BTLE_MODE
+#define SIOT_MESH_BTLE_MODE
 
 extern uint16_t DEVICE_SELF_ID;
 
@@ -35,8 +35,8 @@ extern uint16_t DEVICE_SELF_ID;
 #define SIOT_MESH_ROUTING_ERROR_PACKET 4 // 	Samp-Routing-Error-Packet
 #define SIOT_MESH_ACK_NACK_PACKET 5 // 	Samp-Ack-Nack-Packet
 #ifdef SIOT_MESH_BTLE_MODE
-#define SIOT_MESH_CONNECTION_REQUEST 6
-#define SIOT_MESH_CONNECTION_PERMISSION 7
+#define SIOT_MESH_CONNECTION_REQUEST_NOTIFICATION 6
+#define SIOT_MESH_CONNECTION_LOST_NOTIFICATION 7
 #endif
 
 #define SIOT_MESH_GENERIC_EXTRA_HEADER_FLAGS 0
@@ -108,6 +108,7 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define SIOT_MESH_RET_ERROR_NOT_FOUND 16
 #define SIOT_MESH_RET_ERROR_OUT_OF_RANGE 17
 #define SIOT_MESH_RET_ERROR_ROUTE_UNDER_CONSTRUCTION 18
+#define SIOT_MESH_RET_ERROR_ALREADY_EXISTS 19
 
 
 
@@ -207,6 +208,15 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 uint8_t handler_siot_mesh_packet_rejected_broken( /*MEMORY_HANDLE mem_h, */uint8_t* mesh_val );
 uint8_t handler_siot_mesh_send_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint8_t mesh_val, uint8_t resend_cnt, uint16_t target_id, uint16_t* bus_id );
 uint8_t handler_siot_mesh_timer( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id );
+
+#ifdef SIOT_MESH_BTLE_MODE
+#ifdef USED_AS_RETRANSMITTER
+uint8_t handler_siot_mesh_on_connection_request( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id, uint16_t conn_handle );
+#endif // USED_AS_RETRANSMITTER
+uint8_t handler_siot_mesh_on_connection_request_acceptance( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id, uint16_t conn_handle );
+uint8_t handler_siot_mesh_on_connection_lost( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, uint16_t* bus_id, uint16_t conn_handle );
+uint8_t handler_siot_mesh_get_advert_data( MEMORY_HANDLE mem_h );
+#endif
 
 #endif // USED_AS_MASTER
 
