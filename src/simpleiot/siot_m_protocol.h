@@ -24,8 +24,6 @@ Copyright (C) 2015 OLogN Technologies AG
 #include <hal_time_provider.h>
 #include "../simpleiot_hal/hal_waiting.h"
 
-#define SIOT_MESH_BTLE_MODE
-
 extern uint16_t DEVICE_SELF_ID;
 
 #define SIOT_MESH_ANY_PACKET 0 // (used for other purposes) 	Samp-Unicast-Data-Packet
@@ -186,6 +184,11 @@ void siot_mesh_at_root_remove_resend_task_by_device_id( uint16_t target_id, cons
 
 uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_h, uint16_t offset, uint16_t sz, uint16_t accum_val );
 uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val );
+
+#ifdef SIOT_MESH_BTLE_MODE
+uint8_t siot_mesh_at_root_btle_register_connection_request( uint16_t reporting_device_id, uint16_t bus_id_at_reporting_device, uint16_t requesting_device_id );
+uint8_t siot_mesh_at_root_btle_register_connection_lost( uint16_t reporting_device_id, uint16_t lost_device_id );
+#endif // SIOT_MESH_BTLE_MODE
 
 #ifdef __cplusplus
 }

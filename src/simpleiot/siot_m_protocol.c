@@ -1970,11 +1970,10 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 			}
 			case SIOT_MESH_ROUTING_ERROR_PACKET:
 			{
-				// Samp-Ack-Nack-Packet: | SAMP-ACK-NACK-AND-TTL | OPTIONAL-EXTRA-HEADERS | LAST-HOP | Target-Address | NUMBER-OF-ERRORS | ACK-CHESKSUM | HEADER-CHECKSUM | OPTIONAL-DELAY-UNIT | OPTIONAL-DELAY-PASSED | OPTIONAL-DELAY-LEFT |
-				// SAMP-ACK-NACK-AND-TTL: encoded uint16, bit[0]=1, bits[1..3] = SAMP_ACK_NACK_PACKET, bit [4] = EXTRA-HEADERS-PRESENT, and bits [5..] being TTL
+				// Hmp-Routing-Error-Packet: | HMP-ROUTING-ERROR-PACKET-AND-TTL | OPTIONAL-EXTRA-HEADERS | ERROR-CODE | HEADER-CHECKSUM | PAYLOAD | FULL-CHECKSUM |
+				// HMP-ROUTING-ERROR-PACKET-AND-TTL: encoded uint16, bit[0]=1, bits[1..3] = SIOT_MESH_ROUTING_ERROR_PACKET, bit [4] = EXTRA-HEADERS-PRESENT, and bits [5..] being TTL
 
 				// WARNING: we should not do any irreversible changes until checksums are virified; 
-				//          thus, until that point all data should only be locally collected, and applied only after checksum verification (or do two passes)
 				bool extra_headers_present = ( header >> 4 ) & 0x1;
 				uint16_t TTL = header >> 5;
 
@@ -2022,8 +2021,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 				if ( packet_is_integral )
 				{
-					// NOTE/TODO: here we rely only on checksum-based integrity check; we should be ready to failure of any of zepto_parse_encoded_uint16() calls below
-					// TODO: what should we do with incorrectly constructed packets?
+					// PAYLOAD: | ERROR-REPORTING-DEVICE-ID | NEXT_HOP_AT_ORIGIN | TARGET-DEVICE-ID | ORIGINAL-PACKET-CHECKSUM |
 					uint16_t reporting_device_id = zepto_parse_encoded_uint16_uncertain( &po );
 					uint16_t failed_hop_id = zepto_parse_encoded_uint16_uncertain( &po );
 					if ( failed_hop_id == 0 )
@@ -2032,6 +2030,10 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 						failed_hop_id --;
 					uint16_t failed_target = zepto_parse_encoded_uint16_uncertain( &po );
 					uint16_t original_packet_checksum = zepto_parse_encoded_uint16_uncertain( &po );
+
+					bool still_ok = zepto_parsing_remaining_bytes_uncertain( &po ) == 2 && zepto_parser_is_result_valid( &po );
+					if ( !still_ok )
+						{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 
 					// TODO: think about potential cases, say, an error is reported based on the old state of the routing table while a new one is already in effect (may require more data to be added to the packet)
 					siot_mesh_at_root_remove_link_to_target_route_error_reported( reporting_device_id, failed_hop_id, failed_target, true );
@@ -2046,6 +2048,143 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
 				}
 			}
+#ifdef SIOT_MESH_BTLE_MODE
+			case SIOT_MESH_CONNECTION_REQUEST_NOTIFICATION:
+			{
+				// Connection Request Notification Packet structure: | SAMP-CONNECTION-REQUEST-NOTIFICATION-AND-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | BUS-ID-AT-SOURCE | REQUESTER-ID | HEADER-CHECKSUM | FULL-CHECKSUM |
+
+				bool extra_headers_present = ( header >> 4 ) & 0x1;
+				uint16_t TTL = header >> 5;
+
+				// now we're done with the header; proceeding to optional headers...
+				while ( extra_headers_present )
+				{
+					ZEPTO_DEBUG_PRINTF_1( "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+
+				// SOURCE-ID
+				uint16_t reporting_device_id = zepto_parse_encoded_uint16_uncertain( &po );
+
+				// BUS-ID-AT-SOURCE
+				uint16_t bus_id_at_reporting_device = zepto_parse_encoded_uint16_uncertain( &po );
+
+				// REQUESTER-ID
+				uint16_t requesting_device_id = zepto_parse_encoded_uint16_uncertain( &po );
+
+				// HEADER-CHECKSUM
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
+
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+
+				// packet integrity
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
+				bool packet_is_integral = remaining_size >= 2;
+				if ( packet_is_integral )
+				{
+					zepto_parser_init_by_parser_uncertain( &po1, &po );
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+					checksum = zepto_parse_uint8_uncertain( &po1 );
+					checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po1 )) << 8;
+					packet_is_integral = actual_checksum == checksum;
+				}
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+				if ( packet_is_integral )
+				{
+					siot_mesh_at_root_btle_register_connection_request( reporting_device_id, bus_id_at_reporting_device, requesting_device_id );
+					//+++++TODO: are there any other items to be scheduled/removed?
+					return SIOT_MESH_RET_OK;
+				}
+				else // packet is broken; subject for NAK
+				{
+					// TODO: we have only a partially received packet; prepare NACK
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+			}
+			case SIOT_MESH_CONNECTION_LOST_NOTIFICATION:
+			{
+				// Connection Request Notification Packet structure: | SAMP-CONNECTION-REQUEST-NOTIFICATION-AND-TTL | OPTIONAL-EXTRA-HEADERS| SOURCE-ID | DEVICE-ID | HEADER-CHECKSUM | FULL-CHECKSUM |
+
+				bool extra_headers_present = ( header >> 4 ) & 0x1;
+				uint16_t TTL = header >> 5;
+
+				// now we're done with the header; proceeding to optional headers...
+				while ( extra_headers_present )
+				{
+					ZEPTO_DEBUG_PRINTF_1( "optional headers in \'ACK_NACK\' packet are not yet implemented" );
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+
+				// SOURCE-ID
+				uint16_t reporting_device_id = zepto_parse_encoded_uint16_uncertain( &po );
+
+				// DEVICE-ID
+				uint16_t lost_device_id = zepto_parse_encoded_uint16_uncertain( &po );
+
+				// HEADER-CHECKSUM
+				uint16_t actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po1, total_packet_sz - zepto_parsing_remaining_bytes_uncertain( &po ), 0 );
+				uint16_t checksum = zepto_parse_uint8_uncertain( &po );
+				checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po )) << 8;
+				zepto_parser_init_by_parser_uncertain( &po1, &po );
+
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+				if ( actual_checksum != checksum ) // we have not received even a header -- total garbage received
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+
+				// packet integrity
+				uint16_t remaining_size = zepto_parsing_remaining_bytes_uncertain( &po );
+				bool packet_is_integral = remaining_size >= 2;
+				if ( packet_is_integral )
+				{
+					zepto_parser_init_by_parser_uncertain( &po1, &po );
+					zepto_parser_init_by_parser_uncertain( &po2, &po );
+					zepto_parse_skip_block_uncertain( &po1, remaining_size - 2 );
+					actual_checksum = zepto_parser_calculate_checksum_of_part_of_request_uncertain( mem_h, &po2, remaining_size - 2, actual_checksum );
+					checksum = zepto_parse_uint8_uncertain( &po1 );
+					checksum |= ((uint16_t)zepto_parse_uint8_uncertain( &po1 )) << 8;
+					packet_is_integral = actual_checksum == checksum;
+				}
+				if ( ! zepto_parser_is_result_valid( &po ) )
+				{
+					// TODO: cleanup, if necessary
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+				if ( packet_is_integral )
+				{
+					siot_mesh_at_root_btle_register_connection_lost( reporting_device_id, lost_device_id );
+					//+++++TODO: are there any other items to be scheduled/removed?
+					return SIOT_MESH_RET_OK;
+				}
+				else // packet is broken; subject for NAK
+				{
+					// TODO: we have only a partially received packet; prepare NACK
+//					ZEPTO_DEBUG_ASSERT( NULL == "Error: sending NACK is not yet implemented\n" );
+//					return SIOT_MESH_RET_PASS_TO_SEND;
+					{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;}
+				}
+			}
+#endif // SIOT_MESH_BTLE_MODE
 			case SIOT_MESH_FROM_SANTA_DATA_PACKET:
 			{
 				{ZEPTO_DEBUG_PRINTF_1( "==========   corrupted packet received  ===============\n" );return SIOT_MESH_RET_GARBAGE_RECEIVED;} // TODO: do preliminary parsing to ensure that this packet has not been intended for the root (that is, there is no insane device)
@@ -4889,7 +5028,7 @@ uint8_t handler_siot_mesh_on_connection_request( sa_time_val* currt, waiting_for
 	ZEPTO_DEBUG_PRINTF_3( "Forming connection_request_notification packet, requester_id = %d, bus_id = %d\n", requester_id, *bus_id );
 
 	// SAMP-CONNECTION-REQUEST-NOTIFICATION-AND-TTL: bit[0]=1, bits[1..3] = CONNECTION_REQUEST_NOTIFICATION, bit[4] = EXTRA-HEADERS-PRESENT, and bits [5..] TTL
-	uint16_t header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 0 << 4 ) | ( SIOT_MESH_TTL_MAX << 5 ); // no extra headers, TTL = SIOT_MESH_TTL_MAX
+	uint16_t header = 1 | ( SIOT_MESH_CONNECTION_REQUEST_NOTIFICATION << 1 ) | ( 0 << 4 ) | ( SIOT_MESH_TTL_MAX << 5 ); // no extra headers, TTL = SIOT_MESH_TTL_MAX
 	zepto_parser_encode_and_append_uint16( mem_h, header );
 
 	// SOURCE-ID
@@ -4937,7 +5076,7 @@ uint8_t handler_siot_mesh_on_connection_with_slave_lost( sa_time_val* currt, wai
 	ZEPTO_DEBUG_PRINTF_4( "Forming connection_lost_notification packet, requester_id = %d, bus_id = %d, handle_id = %d\n", device_id, *bus_id, conn_handle );
 
 	// SAMP-CONNECTION-LOST-NOTIFICATION-AND-TTL: bit[0]=1, bits[1..3] = CONNECTION_LOST_NOTIFICATION, bit[4] = EXTRA-HEADERS-PRESENT, and bits [5..] TTL
-	uint16_t header = 1 | ( SIOT_MESH_TO_SANTA_DATA_OR_ERROR_PACKET << 1 ) | ( 0 << 4 ) | ( SIOT_MESH_TTL_MAX << 5 ); // no extra headers, TTL = SIOT_MESH_TTL_MAX
+	uint16_t header = 1 | ( SIOT_MESH_CONNECTION_LOST_NOTIFICATION << 1 ) | ( 0 << 4 ) | ( SIOT_MESH_TTL_MAX << 5 ); // no extra headers, TTL = SIOT_MESH_TTL_MAX
 	zepto_parser_encode_and_append_uint16( mem_h, header );
 
 	// SOURCE-ID
