@@ -118,6 +118,7 @@ typedef struct _SIOT_MESH_RETRANSM_COMMON_DATA
 #define MESH_RECEIVING_HOPS_PERIOD_MS 500
 #define MESH_CHECK_ROUTS_TO_RETRANSMITTERS 10000 // 10s
 #define MESH_SEND_FROM_SANTA_TO_RETRANSMITTERS 60000 // 60s
+#define MESH_WAIT_TO_ALLOW_CONNECTION 1000 // 1s TODO: consider more sofisticated calculations based on delays
 
 uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, MEMORY_HANDLE mem_h, MEMORY_HANDLE mem_ack_h, uint16_t* src_id, uint16_t* bus_id, uint8_t conn_quality, uint8_t error_cnt );
 uint8_t handler_siot_mesh_send_packet( uint8_t is_ctr, sa_time_val* currt, waiting_for* wf, uint16_t target_id, MEMORY_HANDLE mem_h, uint8_t resend_cnt, uint16_t* bus_id );
@@ -142,6 +143,7 @@ extern "C" {
 #define SIOT_MESH_AT_ROOT_RET_RESEND_TASK_FROM_SANTA 10
 #define SIOT_MESH_AT_ROOT_RET_INVALID_PARAM 11
 #define SIOT_MESH_AT_ROOT_RET_IGNORED 12
+#define SIOT_MESH_AT_ROOT_RET_NOT_GRUNTED 13
 
 
 void siot_mesh_at_root_init( sa_time_val* currt );
@@ -186,8 +188,9 @@ uint16_t zepto_parser_calculate_checksum_of_part_of_response( MEMORY_HANDLE mem_
 uint16_t zepto_parser_calculate_checksum_of_part_of_request( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t sz, uint16_t accum_val );
 
 #ifdef SIOT_MESH_BTLE_MODE
-uint8_t siot_mesh_at_root_btle_register_connection_request( uint16_t reporting_device_id, uint16_t bus_id_at_reporting_device, uint16_t requesting_device_id );
-uint8_t siot_mesh_at_root_btle_register_connection_lost( uint16_t reporting_device_id, uint16_t lost_device_id );
+uint8_t siot_mesh_at_root_btle_register_connection_request( uint16_t reporting_device_id, uint16_t bus_id_at_reporting_device, uint16_t requesting_device_id, const sa_time_val* currt, sa_time_val* time_to_next_event );
+uint8_t siot_mesh_at_root_btle_register_connection_loss( uint16_t reporting_device_id, uint16_t lost_device_id );
+uint8_t siot_mesh_at_root_form_allow_to_connect_packet( const sa_time_val* currt, sa_time_val* time_to_next_event, MEMORY_HANDLE mem_h, uint16_t* device_id );
 #endif // SIOT_MESH_BTLE_MODE
 
 #ifdef __cplusplus

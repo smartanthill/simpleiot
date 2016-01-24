@@ -2106,7 +2106,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 				if ( packet_is_integral )
 				{
-					siot_mesh_at_root_btle_register_connection_request( reporting_device_id, bus_id_at_reporting_device, requesting_device_id );
+					siot_mesh_at_root_btle_register_connection_request( reporting_device_id, bus_id_at_reporting_device, requesting_device_id, currt, &(wf->wait_time) );
 					//+++++TODO: are there any other items to be scheduled/removed?
 					return SIOT_MESH_RET_OK;
 				}
@@ -2172,7 +2172,7 @@ uint8_t handler_siot_mesh_receive_packet( sa_time_val* currt, waiting_for* wf, M
 				}
 				if ( packet_is_integral )
 				{
-					siot_mesh_at_root_btle_register_connection_lost( reporting_device_id, lost_device_id );
+					siot_mesh_at_root_btle_register_connection_loss( reporting_device_id, lost_device_id );
 					//+++++TODO: are there any other items to be scheduled/removed?
 					return SIOT_MESH_RET_OK;
 				}
