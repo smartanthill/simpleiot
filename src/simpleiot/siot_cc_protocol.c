@@ -521,8 +521,10 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa
 		case SACCP_PHY_AND_ROUTING_DATA:
 		{
 			// TODO: clarify processing of "additional bits"
+#ifdef SA_DEBUG
 			uint8_t additional_bits = (packet_head_byte >> 3) & 0x7; // "additional bits" passed alongside with PHY-AND-ROUTING-DATA-REQUEST-BODY
 			ZEPTO_DEBUG_ASSERT( additional_bits == 0 ); // Route-Update-Request is always accompanied with SACCP "additional bits" equal to 0x0; bits [6..7] reserved (MUST be zeros)
+#endif
 			handler_siot_process_route_update_request( &po, mem_h );
 			uint16_t ret_head = SACCP_PHY_AND_ROUTING_DATA; // additional bits are 0
 			zepto_parser_encode_and_prepend_uint16( mem_h, ret_head );
@@ -535,8 +537,10 @@ uint8_t handler_saccp_receive( MEMORY_HANDLE mem_h, sasp_nonce_type chain_id, sa
 		case SACCP_STATS_REQUEST:
 		{
 			// TODO: clarify processing of "additional bits"
+#ifdef SA_DEBUG
 			uint8_t additional_bits = (packet_head_byte >> 3) & 0x7; // "additional bits" passed alongside with PHY-AND-ROUTING-DATA-REQUEST-BODY
 			ZEPTO_DEBUG_ASSERT( additional_bits == 0 ); // Route-Update-Request is always accompanied with SACCP "additional bits" equal to 0x0; bits [6..7] reserved (MUST be zeros)
+#endif
 			zepto_parser_free_memory( mem_h );
 			siot_load_ctrs( mem_h );
 #if 0

@@ -136,18 +136,19 @@ void sagdp_init( SAGDP_DATA* sagdp_data )
 uint8_t handler_sagdp_timer( const sa_time_val* currt, waiting_for* wf, sasp_nonce_type nonce, REQUEST_REPLY_HANDLE mem_h, REQUEST_REPLY_HANDLE mem_h_addr, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM, REQUEST_REPLY_HANDLE MEMORY_HANDLE_SAGDP_LSM_SAOUDP_ADDR, SAGDP_DATA* sagdp_data, uint8_t* resend_cnt )
 {
 	uint8_t state = sagdp_data->state;
-	sa_time_val remaining;
+//	sa_time_val remaining;
 	if ( state == SAGDP_STATE_WAIT_REMOTE )
 	{
 		INCREMENT_COUNTER( 20, "handlerSAGDP_timer(), packet resent" );
 
 		if ( sagdp_data->event_type == SAGDP_EV_RESEND_LSP ) // there is something to resend
 		{
-			bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(sagdp_data->next_event_time), &remaining );
+//			bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(sagdp_data->next_event_time), &remaining );
+			bool time_still_remains = sa_hal_time_val_get_remaining_time( currt, &(sagdp_data->next_event_time), &(wf->wait_time) );
 
 			if ( time_still_remains ) // it's not a time for resending; just let themm know, when to wake us up basedcurrent schedule on 
 			{
-				sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &remaining );
+//				sa_hal_time_val_copy_from_if_src_less( &(wf->wait_time), &remaining );
 				return SAGDP_RET_OK;
 			}
 			else // time to resend; schedule new resend event and report wake time based on that new scheduling
