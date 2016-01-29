@@ -18,6 +18,10 @@ Copyright (C) 2015 OLogN Technologies AG
 #if ! defined __SIOT_STATS_COUNTERS_H__
 #define __SIOT_STATS_COUNTERS_H__
 
+#define ENABLE_STATS_COUNTERS //TODO: make it global!
+
+#ifdef ENABLE_STATS_COUNTERS
+
 #include "siot_common.h"
 #include "../simpleiot_hal/siot_mem_mngmt.h"
 #include <simpleiot/siot_bus_data.h>
@@ -63,6 +67,17 @@ extern uint16_t* siot_stats_counters_bus_specific_16;
 // initializing and reporting
 void siot_init_ctrs();
 void siot_load_ctrs( MEMORY_HANDLE mem_h );
+
+#else // ENABLE_STATS_COUNTERS
+
+#define SIOT_STATS_CTR_BUS_SPECIFIC_16_MAX 0
+
+#define SIOUT_INCREMENT_CTR( ctr )
+#define SIOUT_INCREMENT_CTR_PER_BUS( bus, ctr )
+#define siot_init_ctrs()
+#define siot_load_ctrs( mem_h )
+
+#endif // ENABLE_STATS_COUNTERS
 
 
 // obsolete staff (to be totally removed soon)

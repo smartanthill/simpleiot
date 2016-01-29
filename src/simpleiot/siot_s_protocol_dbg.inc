@@ -484,7 +484,7 @@ uint8_t handler_sasp_receive( const uint8_t* key, uint8_t* pid, MEMORY_HANDLE me
 		handler_sasp_get_packet_id( ne );
 		SASP_EncryptAndAddAuthenticationData( mem_h, key, ne );
 		ZEPTO_DEBUG_PRINTF_1( "handler_sasp_receive(): ------------------- ERROR OLD NONCE WILL BE SENT ----------------------\n" );
-//		ZEPTO_DEBUG_ASSERT( ugly_hook_get_response_size( mem_h ) <= 39 );
+//		ZEPTO_DEBUG_ASSERT( memory_object_get_response_size( mem_h ) <= 39 );
 		return SASP_RET_TO_LOWER_ERROR;
 	}
 

@@ -107,12 +107,6 @@ typedef struct _parser_obj_uncertain
 	uint16_t offset;
 } parser_obj_uncertain;
 
-// UGLY HOOK FOR BY-PARTS (INITIAL PHASE OF) DEVELOPMENT
-uint16_t ugly_hook_get_request_size( REQUEST_REPLY_HANDLE mem_h );
-uint16_t ugly_hook_get_response_size( REQUEST_REPLY_HANDLE mem_h );
-// end of UGLY HOOK FOR BY-PARTS (INITIAL PHASE OF) DEVELOPMENT
-
-
 
 #ifdef __cplusplus
 extern "C" {
@@ -209,8 +203,6 @@ INLINE void zepto_append_part_of_request_to_response_of_another_handle_uncertain
 }
 
 
-
-uint16_t zepto_writer_get_response_size( MEMORY_HANDLE mem_h );
 
 void zepto_parser_free_memory( REQUEST_REPLY_HANDLE mem_h );
 void zepto_parser_free_response( REQUEST_REPLY_HANDLE mem_h );

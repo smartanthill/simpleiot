@@ -118,7 +118,7 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 				bodyparts[body_part].ph_fn( (void*)(bodyparts[body_part].ph_config), (void*)(bodyparts[body_part].ph_state), &po3, MEMORY_HANDLE_DEFAULT_PLUGIN/*, WaitingFor* waiting_for*/, first_byte );
 				// now we have raw data from plugin; form a frame
 				// TODO: here is a place to form optional headers, if any
-				uint16_t ret_data_sz = zepto_writer_get_response_size( MEMORY_HANDLE_DEFAULT_PLUGIN );
+				uint16_t ret_data_sz = memory_object_get_response_size( MEMORY_HANDLE_DEFAULT_PLUGIN );
 				uint16_t prefix = (uint16_t)1 | ( ret_data_sz << 2 ); // TODO: if data were truncated, add a respective bit; TODO: usi bit field processing instead
 				zepto_parser_encode_and_prepend_uint16( MEMORY_HANDLE_DEFAULT_PLUGIN, prefix );
 
@@ -192,7 +192,7 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 				// now we have raw data collected; form a frame
 #if !defined ZEPTO_VM_USE_SIMPLE_FRAME
 				// TODO: here is a place to form optional headers, if any
-				uint16_t ret_data_sz = zepto_writer_get_response_size( MEMORY_HANDLE_DEFAULT_PLUGIN );
+				uint16_t ret_data_sz = memory_object_get_response_size( MEMORY_HANDLE_DEFAULT_PLUGIN );
 				uint16_t prefix = (uint16_t)1 | ( ret_data_sz << 2 ); // TODO: if data were truncated, add a respective bit; TODO: usi bit field processing instead
 				zepto_parser_encode_and_prepend_uint16( MEMORY_HANDLE_DEFAULT_PLUGIN, prefix );
 				zepto_append_response_to_response_of_another_handle( MEMORY_HANDLE_DEFAULT_PLUGIN, mem_h );
@@ -221,7 +221,7 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 
 				// now we have raw data collected; form a frame
 				// TODO: here is a place to form optional headers, if any
-				uint16_t ret_data_sz = zepto_writer_get_response_size( MEMORY_HANDLE_DEFAULT_PLUGIN );
+				uint16_t ret_data_sz = memory_object_get_response_size( MEMORY_HANDLE_DEFAULT_PLUGIN );
 				uint16_t prefix = (uint16_t)1 | ( ret_data_sz << 2 ); // TODO: if data were truncated, add a respective bit; TODO: usi bit field processing instead
 				zepto_parser_encode_and_prepend_uint16( MEMORY_HANDLE_DEFAULT_PLUGIN, prefix );
 				zepto_append_response_to_response_of_another_handle( MEMORY_HANDLE_DEFAULT_PLUGIN, mem_h );
@@ -336,7 +336,7 @@ uint8_t handler_zepto_vm( MEMORY_HANDLE mem_h, uint8_t first_byte, sa_time_val* 
 	}
 	else*/
 	{
-		uint16_t ret_data_full_sz = zepto_writer_get_response_size( mem_h );
+		uint16_t ret_data_full_sz = memory_object_get_response_size( mem_h );
 		uint16_t reply_hdr;
 		// TODO: it's a place to set TRUNCATED flag for the whole reply, if necessary
 		// TODO: use bit field processing instead

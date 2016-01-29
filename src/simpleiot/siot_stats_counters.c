@@ -17,6 +17,8 @@ Copyright (C) 2015 OLogN Technologies AG
 
 #include "siot_stats_counters.h"
 
+#ifdef ENABLE_STATS_COUNTERS
+
 #if SIOT_STATS_CTR_16_MAX != 0
 uint16_t siot_stats_counters_16[ SIOT_STATS_CTR_16_MAX ];
 #endif
@@ -70,3 +72,4 @@ void siot_load_ctrs( MEMORY_HANDLE mem_h )
 	}
 }
 
+#endif // ENABLE_STATS_COUNTERS
