@@ -128,8 +128,8 @@ typedef struct _MESH_PENDING_RESENDS_PACKET_INFO
 	uint16_t next_hop;
 } MESH_PENDING_RESENDS_PACKET_INFO;
 
-#define SIOT_MESH_LINK_TABLE_SIZE_MAX 256
-#define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 256
+#define SIOT_MESH_LINK_TABLE_SIZE_MAX 5
+#define SIOT_MESH_ROUTE_TABLE_SIZE_MAX 5
 
 uint8_t siot_mesh_link_table_size;
 static SIOT_MESH_LINK siot_mesh_link_table[ SIOT_MESH_LINK_TABLE_SIZE_MAX ];
@@ -4278,12 +4278,6 @@ if ( !( last_requests[0].ineffect == false || last_requests[1].ineffect == false
 
 				if ( ack_requested )
 				{
-static uint16_t ctr_uni = 0;
-ctr_uni++;
-if ( ctr_uni == 93 )
-{
-ZEPTO_DEBUG_PRINTF_2( "ctr_uni = %d\n", ctr_uni );
-}
 					zepto_parser_free_memory( mem_ack_h );
 					uint8_t ret_code = siot_mesh_get_bus_id_for_target( last_hop, ack_bus_id );
 					if ( ret_code == SIOT_MESH_RET_OK )
@@ -4304,7 +4298,7 @@ ZEPTO_DEBUG_PRINTF_2( "ctr_uni = %d\n", ctr_uni );
 						else
 						{
 							// TODO: iterate over buses
-							uint16_t bus_cnt = hal_get_bus_count();
+//							uint16_t bus_cnt = hal_get_bus_count();
 							*ack_bus_id = 0;
 							siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF, *ack_bus_id );
 							siot_mesh_at_root_add_send_to_santa_task( mem_ack_h, currt, &(wf->wait_time), *ack_bus_id );
@@ -4352,7 +4346,7 @@ ZEPTO_DEBUG_PRINTF_2( "ctr_uni = %d\n", ctr_uni );
 							if ( is_from_root ) // we would send an ACK in the opposite direction (that is, to root); we lost that direction; thus, we have to send To-Santa
 							{
 								// TODO: iterate over buses
-								uint16_t bus_cnt = hal_get_bus_count();
+//								uint16_t bus_cnt = hal_get_bus_count();
 								*ack_bus_id = 0;
 								siot_mesh_form_packet_to_santa( mem_ack_h, 0xFF, *ack_bus_id );
 								siot_mesh_at_root_add_send_to_santa_task( mem_ack_h, currt, &(wf->wait_time), *ack_bus_id );
