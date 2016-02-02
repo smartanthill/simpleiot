@@ -97,15 +97,9 @@ Copyright (C) 2015 OLogN Technologies AG
 typedef struct _parser_obj
 {
 	MEMORY_HANDLE mem_handle;
-	uint16_t offset;
-} parser_obj;
-
-typedef struct _parser_obj_uncertain
-{
-	MEMORY_HANDLE mem_handle;
 	bool res_valid;
 	uint16_t offset;
-} parser_obj_uncertain;
+} parser_obj;
 
 
 #ifdef __cplusplus
@@ -118,32 +112,23 @@ void zepto_mem_man_init_memory_management();
 // parsing functions
 void zepto_parser_init( parser_obj* po, REQUEST_REPLY_HANDLE mem_h );
 void zepto_parser_init_by_parser( parser_obj* po, const parser_obj* po_base );
+INLINE bool zepto_parser_is_result_valid( parser_obj* po ) {return po->res_valid;}
 uint8_t zepto_parse_uint8( parser_obj* po );
 bool zepto_parse_read_block( parser_obj* po, uint8_t* block, uint16_t size );
 bool zepto_parse_skip_block( parser_obj* po, uint16_t size );
 bool zepto_is_parsing_done( parser_obj* po );
 uint16_t zepto_parsing_remaining_bytes( parser_obj* po );
 
-// "uncertain" parsing (to be used when data can be corrupted)
-void zepto_parser_init_uncertain( parser_obj_uncertain* po, REQUEST_REPLY_HANDLE mem_h );
-void zepto_parser_init_by_parser_uncertain( parser_obj_uncertain* po, const parser_obj_uncertain* po_base );
-INLINE bool zepto_parser_is_result_valid( parser_obj_uncertain* po )
+uint8_t zepto_parse_encoded_uint8( parser_obj* po );
+uint16_t zepto_parse_encoded_uint16( parser_obj* po );
+INLINE int16_t zepto_parse_encoded_signed_int16( parser_obj* po )
 {
-	return po->res_valid;
-}
-uint8_t zepto_parse_uint8_uncertain( parser_obj_uncertain* po );
-bool zepto_parse_read_block_uncertain( parser_obj_uncertain* po, uint8_t* block, uint16_t size );
-bool zepto_parse_skip_block_uncertain( parser_obj_uncertain* po, uint16_t size );
-uint16_t zepto_parsing_remaining_bytes_uncertain( parser_obj_uncertain* po );
-uint8_t zepto_parse_encoded_uint8_uncertain( parser_obj_uncertain* po );
-uint16_t zepto_parse_encoded_uint16_uncertain( parser_obj_uncertain* po );
-INLINE int16_t zepto_parse_encoded_signed_int16_uncertain( parser_obj_uncertain* po )
-{
-	uint16_t ux = zepto_parse_encoded_uint16_uncertain( po );
+	uint16_t ux = zepto_parse_encoded_uint16( po );
 	return (int16_t)((ux >> 1) ^ (-(ux & 1)));
 }
-uint32_t zepto_parse_encoded_uint32_uncertain( parser_obj_uncertain* po );
-void zepto_parser_decode_uint_uncertain( parser_obj_uncertain* po, uint8_t* bytes_out, uint8_t target_size );
+uint32_t zepto_parse_encoded_uint32( parser_obj* po );
+void zepto_parser_decode_uint( parser_obj* po, uint8_t* bytes_out, uint8_t target_size );
+
 // writing functions
 void zepto_write_uint8( REQUEST_REPLY_HANDLE mem_h, uint8_t val );
 //void zepto_write_encoded_uint16( REQUEST_REPLY_HANDLE mem_h, uint16_t val );
@@ -159,49 +144,8 @@ void zepto_append_response_to_response_of_another_handle( MEMORY_HANDLE mem_h, M
 void zepto_copy_part_of_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end, MEMORY_HANDLE target_mem_h );
 void zepto_append_part_of_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end, MEMORY_HANDLE target_mem_h );
 void zepto_prepend_part_of_request_to_response_of_another_handle( MEMORY_HANDLE mem_h, parser_obj* po_start, parser_obj* po_end, MEMORY_HANDLE target_mem_h );
-//void zepto_convert_part_of_request_to_response( MEMORY_HANDLE mem_h, parser_obj* po_start, uint16_t cutoff_cnt )
 void zepto_write_prepend_byte( MEMORY_HANDLE mem_h, uint8_t bt );
 void zepto_write_prepend_block( MEMORY_HANDLE mem_h, const uint8_t* block, uint16_t size );
-
-INLINE void zepto_convert_part_of_request_to_response_uncertain( MEMORY_HANDLE mem_h, parser_obj_uncertain* po_start, parser_obj_uncertain* po_end )
-{
-	if ( po_start->res_valid && po_end->res_valid )
-	{
-		parser_obj po1, po2;
-		po1.mem_handle = po_start->mem_handle;
-		po1.offset = po_start->offset;
-		po2.mem_handle = po_end->mem_handle;
-		po2.offset = po_end->offset;
-		zepto_convert_part_of_request_to_response( mem_h, &po1, &po2 );
-	}
-}
-
-INLINE void zepto_append_part_of_request_to_response_uncertain( MEMORY_HANDLE mem_h, parser_obj_uncertain* po_start, parser_obj_uncertain* po_end )
-{
-	if ( po_start->res_valid && po_end->res_valid )
-	{
-		parser_obj po1, po2;
-		po1.mem_handle = po_start->mem_handle;
-		po1.offset = po_start->offset;
-		po2.mem_handle = po_end->mem_handle;
-		po2.offset = po_end->offset;
-		zepto_append_part_of_request_to_response( mem_h, &po1, &po2 );
-	}
-}
-
-INLINE void zepto_append_part_of_request_to_response_of_another_handle_uncertain( MEMORY_HANDLE mem_h, parser_obj_uncertain* po_start, parser_obj_uncertain* po_end, MEMORY_HANDLE target_mem_h )
-{
-	if ( po_start->res_valid && po_end->res_valid )
-	{
-		parser_obj po1, po2;
-		po1.mem_handle = po_start->mem_handle;
-		po1.offset = po_start->offset;
-		po2.mem_handle = po_end->mem_handle;
-		po2.offset = po_end->offset;
-		zepto_append_part_of_request_to_response_of_another_handle( mem_h, &po1, &po2, target_mem_h );
-	}
-}
-
 
 
 void zepto_parser_free_memory( REQUEST_REPLY_HANDLE mem_h );
@@ -221,15 +165,6 @@ void zepto_writer_get_copy_of_response( MEMORY_HANDLE mem_h, uint8_t* buff );
 // specific encoded uint functions
 //void zepto_parser_encode_uint( const uint8_t* num_bytes, uint8_t num_sz_max, uint8_t** bytes_out );
 //void zepto_parser_decode_uint( const uint8_t** packed_num_bytes, uint8_t* bytes_out, uint8_t target_size );
-uint8_t zepto_parse_encoded_uint8( parser_obj* po );
-uint16_t zepto_parse_encoded_uint16( parser_obj* po );
-INLINE int16_t zepto_parse_encoded_signed_int16( parser_obj* po )
-{
-	uint16_t ux = zepto_parse_encoded_uint16( po );
-	return (int16_t)((ux >> 1) ^ (-(ux & 1)));
-}
-uint32_t zepto_parse_encoded_uint32( parser_obj* po );
-void zepto_parser_decode_uint( parser_obj* po, uint8_t* bytes_out, uint8_t target_size );
 
 void zepto_parser_encode_and_append_uint8( MEMORY_HANDLE mem_h, uint8_t num );
 void zepto_parser_encode_and_append_uint16( MEMORY_HANDLE mem_h, uint16_t num );
